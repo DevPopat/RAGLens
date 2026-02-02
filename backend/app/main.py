@@ -73,12 +73,9 @@ async def root():
 
 
 # Import and include routers
-from app.api.routes import chat, evaluation
+from app.api.routes import chat, evaluation, golden_set, diagnosis
 
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(evaluation.router, prefix="/api/evaluation", tags=["evaluation"])
-
-# To be added in later phases:
-# from app.api.routes import golden_set, metrics
-# app.include_router(golden_set.router, prefix="/api/golden-set", tags=["golden-set"])
-# app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
+app.include_router(golden_set.router, prefix="/api/golden-set", tags=["golden-set"])
+app.include_router(diagnosis.router, prefix="/api/diagnosis", tags=["diagnosis"])

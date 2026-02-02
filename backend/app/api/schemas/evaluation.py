@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class EvaluationRequest(BaseModel):
-    """Request to evaluate a query/response pair."""
+    """Request to evaluate a query/response pair using RAGAS."""
 
     query_id: UUID = Field(..., description="ID of the query to evaluate")
     evaluator_provider: Optional[str] = Field(
@@ -15,15 +15,11 @@ class EvaluationRequest(BaseModel):
     )
     expected_category: Optional[str] = Field(
         None,
-        description="Expected category from golden set"
+        description="Expected category (for metadata only)"
     )
     expected_intent: Optional[str] = Field(
         None,
-        description="Expected intent from golden set"
-    )
-    relevant_doc_ids: Optional[List[str]] = Field(
-        None,
-        description="List of relevant document IDs for retrieval evaluation"
+        description="Expected intent (for metadata only)"
     )
 
 

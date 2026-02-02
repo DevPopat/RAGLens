@@ -20,9 +20,7 @@ from app.api.schemas.evaluation import (
     BatchEvaluationRequest,
     BatchEvaluationResponse
 )
-from app.evaluation.generation.llm_judge import LLMJudge, evaluate_with_llm
-from app.evaluation.retrieval.relevance import RetrievalEvaluator
-from app.core.retrieval.retriever import RAGRetriever
+from app.evaluation.ragas import RAGASEvaluator
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,11 +32,12 @@ async def run_evaluation(
     request: EvaluationRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Run evaluation on a specific query response.
+    """Run RAGAS evaluation on a specific query response.
 
-    This evaluates an existing query/response pair using:
-    - LLM-as-judge for generation quality
-    - Retrieval metrics if relevant_doc_ids provided
+    This evaluates an existing query/response pair using RAGAS metrics:
+    - Context Precision: Are retrieved docs relevant?
+    - Faithfulness: Is response grounded in context?
+    - Answer Relevancy: Is answer relevant to question?
     """
     try:
         # Fetch the query and response
@@ -58,52 +57,30 @@ async def run_evaluation(
         # Parse contexts from response
         contexts = response_obj.sources_json or []
 
-        # Run LLM-as-judge evaluation
-        llm_judge = LLMJudge(
+        # Run RAGAS evaluation
+        evaluator = RAGASEvaluator(
             provider=request.evaluator_provider or "anthropic"
         )
 
-        evaluation_result = await llm_judge.evaluate_response(
+        evaluation_result = await evaluator.evaluate_response(
             query=query_obj.query_text,
             response=response_obj.response_text,
             contexts=contexts,
-            expected_category=request.expected_category,
-            expected_intent=request.expected_intent
+            expected_answer=None  # No ground truth for single query evaluation
         )
-
-        # Run retrieval evaluation if relevant docs provided
-        retrieval_metrics = None
-        if request.relevant_doc_ids:
-            retrieval_evaluator = RetrievalEvaluator()
-            retrieval_metrics = retrieval_evaluator.evaluate_retrieval(
-                retrieved_docs=contexts,
-                relevant_doc_ids=set(request.relevant_doc_ids),
-                k_values=[1, 3, 5]
-            )
-
-        # Combine evaluations
-        combined_scores = {
-            "generation": evaluation_result.get("scores", {}),
-            "overall_score": evaluation_result.get("overall_score"),
-            "retrieval": retrieval_metrics
-        }
 
         # Store evaluation in database
         evaluation = Evaluation(
             id=uuid4(),
             query_id=request.query_id,
-            evaluation_type="llm_judge",
-            scores_json=combined_scores,
-            evaluator=evaluation_result.get("evaluator", "unknown"),
-            metadata_json={
+            evaluation_type="ragas",
+            scores_json=evaluation_result.get("scores", {}),
+            evaluator=evaluation_result.get("evaluator", "ragas/unknown"),
+            metadata={
                 "expected_category": request.expected_category,
                 "expected_intent": request.expected_intent,
-                "evaluation_detail": {
-                    "explanation": evaluation_result.get("explanation"),
-                    "strengths": evaluation_result.get("strengths", []),
-                    "weaknesses": evaluation_result.get("weaknesses", []),
-                    "suggested_improvement": evaluation_result.get("suggested_improvement")
-                }
+                "has_ground_truth": evaluation_result.get("has_ground_truth", False),
+                "metrics_used": evaluation_result.get("metrics_used", [])
             },
             timestamp=datetime.utcnow()
         )
@@ -116,9 +93,9 @@ async def run_evaluation(
             id=evaluation.id,
             query_id=evaluation.query_id,
             evaluation_type=evaluation.evaluation_type,
-            scores=combined_scores,
+            scores=evaluation.scores_json,
             evaluator=evaluation.evaluator,
-            metadata=evaluation.metadata_json,
+            metadata=evaluation.metadata,
             timestamp=evaluation.timestamp
         )
 
@@ -132,7 +109,7 @@ async def run_batch_evaluation(
     request: BatchEvaluationRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Run evaluation on multiple queries in batch.
+    """Run RAGAS evaluation on multiple queries in batch.
 
     Useful for evaluating golden sets or regression testing.
     """
@@ -140,7 +117,7 @@ async def run_batch_evaluation(
         results = []
         errors = []
 
-        llm_judge = LLMJudge(provider=request.evaluator_provider or "anthropic")
+        evaluator = RAGASEvaluator(provider=request.evaluator_provider or "anthropic")
 
         for query_id in request.query_ids:
             try:
@@ -163,26 +140,24 @@ async def run_batch_evaluation(
                 query_obj, response_obj = row
                 contexts = response_obj.sources_json or []
 
-                # Evaluate
-                evaluation_result = await llm_judge.evaluate_response(
+                # Evaluate with RAGAS
+                evaluation_result = await evaluator.evaluate_response(
                     query=query_obj.query_text,
                     response=response_obj.response_text,
-                    contexts=contexts
+                    contexts=contexts,
+                    expected_answer=None
                 )
 
                 # Store evaluation
                 evaluation = Evaluation(
                     id=uuid4(),
                     query_id=query_id,
-                    evaluation_type="llm_judge_batch",
-                    scores_json={
-                        "generation": evaluation_result.get("scores", {}),
-                        "overall_score": evaluation_result.get("overall_score")
-                    },
-                    evaluator=evaluation_result.get("evaluator"),
-                    metadata_json={
+                    evaluation_type="ragas_batch",
+                    scores_json=evaluation_result.get("scores", {}),
+                    evaluator=evaluation_result.get("evaluator", "ragas/unknown"),
+                    metadata={
                         "batch_id": request.batch_name,
-                        "explanation": evaluation_result.get("explanation")
+                        "has_ground_truth": evaluation_result.get("has_ground_truth", False)
                     },
                     timestamp=datetime.utcnow()
                 )
@@ -247,7 +222,7 @@ async def get_evaluation(
         evaluation_type=evaluation.evaluation_type,
         scores=evaluation.scores_json,
         evaluator=evaluation.evaluator,
-        metadata=evaluation.metadata_json,
+        metadata=evaluation.metadata,
         timestamp=evaluation.timestamp
     )
 
@@ -286,7 +261,7 @@ async def list_evaluations(
                 evaluation_type=e.evaluation_type,
                 scores=e.scores_json,
                 evaluator=e.evaluator,
-                metadata=e.metadata_json,
+                metadata=e.metadata,
                 timestamp=e.timestamp
             )
             for e in evaluations
@@ -320,7 +295,7 @@ async def get_evaluations_for_query(
                 evaluation_type=e.evaluation_type,
                 scores=e.scores_json,
                 evaluator=e.evaluator,
-                metadata=e.metadata_json,
+                metadata=e.metadata,
                 timestamp=e.timestamp
             )
             for e in evaluations
