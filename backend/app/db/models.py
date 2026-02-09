@@ -58,7 +58,7 @@ class Evaluation(Base):
     scores_json = Column(JSON, nullable=False)  # Dictionary of metric scores
     evaluator = Column(String(100), nullable=False)  # Which LLM evaluated
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-    metadata = Column(JSON, nullable=True)  # Additional evaluation metadata
+    eval_metadata = Column(JSON, nullable=True)  # Additional evaluation metadata
 
     # Relationships
     query = relationship("Query", back_populates="evaluations")
@@ -97,7 +97,7 @@ class GoldenTestCase(Base):
     relevant_doc_ids = Column(ARRAY(String), nullable=True)  # List of relevant chunk IDs
     category = Column(String(100), nullable=True)
     intent = Column(String(100), nullable=True)
-    metadata = Column(JSON, nullable=True)
+    case_metadata = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships

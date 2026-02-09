@@ -8,8 +8,6 @@ from typing import List, Dict, Any, Tuple
 from collections import defaultdict
 import random
 
-import httpx
-
 logger = logging.getLogger(__name__)
 
 
@@ -17,19 +15,14 @@ class BitetDatasetLoader:
     """Loader for Bitext Customer Support dataset.
 
     Supports both JSON and CSV formats with flags, category, intent metadata.
+    Dataset must be provided locally - no automatic downloading.
     """
-
-    # CSV format (recommended - includes flags)
-    DATASET_CSV_URL = "https://raw.githubusercontent.com/bitext/customer-support-llm-chatbot-training-dataset/main/Bitext_Sample_Customer_Support_Training_Dataset_27K_responses-v11.csv"
-
-    # JSON format (fallback)
-    DATASET_JSON_URL = "https://raw.githubusercontent.com/bitext/customer-support-llm-chatbot-training-dataset/main/Bitext_Sample_Customer_Support_Training_Dataset_27K_responses-v11.json"
 
     def __init__(self, raw_data_path: str = "/app/data/raw", use_csv: bool = True):
         """Initialize loader.
 
         Args:
-            raw_data_path: Directory to store raw dataset
+            raw_data_path: Directory containing the dataset
             use_csv: Use CSV format (includes flags) vs JSON
         """
         self.raw_data_path = Path(raw_data_path)
@@ -38,33 +31,8 @@ class BitetDatasetLoader:
 
         if use_csv:
             self.dataset_file = self.raw_data_path / "bitext_customer_support.csv"
-            self.dataset_url = self.DATASET_CSV_URL
         else:
             self.dataset_file = self.raw_data_path / "bitext_customer_support.json"
-            self.dataset_url = self.DATASET_JSON_URL
-
-    async def download_dataset(self) -> Path:
-        """Download Bitext dataset from GitHub.
-
-        Returns:
-            Path to downloaded file
-        """
-        if self.dataset_file.exists():
-            logger.info(f"Dataset already exists at {self.dataset_file}")
-            return self.dataset_file
-
-        logger.info(f"Downloading Bitext dataset from {self.dataset_url}")
-
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.get(self.dataset_url)
-            response.raise_for_status()
-
-            # Save to file
-            with open(self.dataset_file, "wb") as f:
-                f.write(response.content)
-
-        logger.info(f"Dataset downloaded to {self.dataset_file}")
-        return self.dataset_file
 
     def load_dataset(self) -> List[Dict[str, Any]]:
         """Load dataset from file (CSV or JSON).
@@ -81,7 +49,8 @@ class BitetDatasetLoader:
         """
         if not self.dataset_file.exists():
             raise FileNotFoundError(
-                f"Dataset not found at {self.dataset_file}. Run download_dataset() first."
+                f"Dataset not found at {self.dataset_file}. "
+                f"Please place your bitext_customer_support.csv file in {self.raw_data_path}"
             )
 
         logger.info(f"Loading dataset from {self.dataset_file}")
@@ -151,15 +120,15 @@ class BitetDatasetLoader:
 
         return normalized
 
-    async def load_or_download(self) -> List[Dict[str, Any]]:
-        """Load dataset, downloading if necessary.
+    def load(self) -> List[Dict[str, Any]]:
+        """Load dataset from local file.
 
         Returns:
             List of Q&A dictionaries
-        """
-        if not self.dataset_file.exists():
-            await self.download_dataset()
 
+        Raises:
+            FileNotFoundError: If dataset file doesn't exist
+        """
         return self.load_dataset()
 
     def get_dataset_stats(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -409,7 +378,7 @@ class BitetDatasetLoader:
         logger.info(f"Loaded {len(items)} items from {split} split")
         return items
 
-    async def load_and_split(
+    def load_and_split(
         self,
         test_size: float = 0.2,
         random_seed: int = 42,
@@ -426,6 +395,9 @@ class BitetDatasetLoader:
 
         Returns:
             Tuple of (train_items, test_items)
+
+        Raises:
+            FileNotFoundError: If dataset file doesn't exist
         """
         train_file = self.raw_data_path / "bitext_train.json"
         test_file = self.raw_data_path / "bitext_test_holdout.json"
@@ -438,7 +410,7 @@ class BitetDatasetLoader:
             return train_items, test_items
 
         # Load full dataset
-        items = await self.load_or_download()
+        items = self.load_dataset()
 
         # Add source IDs for tracking
         items = self.add_source_ids(items)

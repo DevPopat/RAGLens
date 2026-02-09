@@ -174,8 +174,7 @@ async def _run_rag_pipeline(
         query_text=context_query,
         top_k=request.top_k,
         llm_provider=request.llm_provider,
-        filter_metadata=filter_metadata,
-        conversation_history=_convert_history(request.conversation_history)
+        filter_metadata=filter_metadata
     )
 
     # Format sources for storage
@@ -243,9 +242,9 @@ async def _generate_direct_response(
     else:
         # For other types, use LLM but without retrieval
         if request.llm_provider == "anthropic":
-            client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            client = AsyncAnthropic(api_key=settings.anthropic_api_key)
             response = await client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
+                model=settings.claude_model,
                 max_tokens=500,
                 temperature=0.7,
                 system="You are a helpful customer support assistant. Respond naturally to the user.",
@@ -253,9 +252,9 @@ async def _generate_direct_response(
             )
             response_text = response.content[0].text
         else:
-            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
             response = await client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
+                model=settings.openai_model,
                 messages=[
                     {"role": "system", "content": "You are a helpful customer support assistant."},
                     {"role": "user", "content": request.query}
@@ -272,7 +271,7 @@ async def _generate_direct_response(
         "sources": [],
         "sources_json": [],
         "llm_provider": request.llm_provider,
-        "model": settings.ANTHROPIC_MODEL if request.llm_provider == "anthropic" else settings.OPENAI_MODEL,
+        "model": settings.claude_model if request.llm_provider == "anthropic" else settings.openai_model,
         "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         "latency_ms": latency_ms,
         "cost": 0.0  # Minimal cost for canned responses

@@ -2,7 +2,6 @@
 import logging
 from typing import List, Dict, Any, Optional
 import chromadb
-from chromadb.config import Settings as ChromaSettings
 
 from app.config import settings
 from app.core.embeddings.openai_embeddings import OpenAIEmbeddings
@@ -28,10 +27,7 @@ class ChromaDBStore:
         self.persist_directory = persist_directory or settings.chromadb_path
 
         # Initialize ChromaDB client with persistence
-        self.client = chromadb.Client(ChromaSettings(
-            persist_directory=self.persist_directory,
-            anonymized_telemetry=False
-        ))
+        self.client = chromadb.PersistentClient(path=self.persist_directory)
 
         # Get or create collection
         self.collection = self.client.get_or_create_collection(

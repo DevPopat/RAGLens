@@ -155,7 +155,7 @@ async def get_golden_set(
                 expected_answer=tc.expected_answer,
                 category=tc.category,
                 intent=tc.intent,
-                metadata=tc.metadata,
+                metadata=tc.case_metadata,
                 created_at=tc.created_at
             )
             for tc in test_cases
@@ -239,7 +239,7 @@ async def add_test_case(
         expected_answer=request.expected_answer,
         category=request.category,
         intent=request.intent,
-        metadata=request.metadata,
+        case_metadata=request.metadata,
         created_at=datetime.utcnow()
     )
 
@@ -259,7 +259,7 @@ async def add_test_case(
         expected_answer=test_case.expected_answer,
         category=test_case.category,
         intent=test_case.intent,
-        metadata=test_case.metadata,
+        metadata=test_case.case_metadata,
         created_at=test_case.created_at
     )
 
@@ -284,7 +284,7 @@ async def add_test_cases_bulk(
             expected_answer=case.expected_answer,
             category=case.category,
             intent=case.intent,
-            metadata=case.metadata,
+            metadata=case.case_metadata,
             created_at=datetime.utcnow()
         )
         db.add(test_case)
@@ -316,7 +316,7 @@ async def get_test_case(
         expected_answer=tc.expected_answer,
         category=tc.category,
         intent=tc.intent,
-        metadata=tc.metadata,
+        metadata=tc.case_metadata,
         created_at=tc.created_at
     )
 
@@ -342,7 +342,7 @@ async def update_test_case(
     if request.intent is not None:
         tc.intent = request.intent
     if request.metadata is not None:
-        tc.metadata = request.metadata
+        tc.case_metadata = request.metadata
 
     # Update golden set version
     gs = await db.get(GoldenTestSet, golden_set_id)
@@ -360,7 +360,7 @@ async def update_test_case(
         expected_answer=tc.expected_answer,
         category=tc.category,
         intent=tc.intent,
-        metadata=tc.metadata,
+        metadata=tc.case_metadata,
         created_at=tc.created_at
     )
 
@@ -410,7 +410,7 @@ async def import_from_holdout(
 
     try:
         # Load holdout data
-        loader = BitetDatasetLoader(raw_data_path=settings.DATA_PATH)
+        loader = BitetDatasetLoader(raw_data_path=settings.raw_data_path)
         holdout_items = loader.load_split("test")
     except FileNotFoundError:
         raise HTTPException(
@@ -444,7 +444,7 @@ async def import_from_holdout(
                 expected_answer=item["response"],
                 category=item.get("category"),
                 intent=item.get("intent"),
-                metadata={
+                case_metadata={
                     "flags": item.get("flags"),
                     "original_index": item.get("original_index"),
                     "source_id": item.get("source_id")

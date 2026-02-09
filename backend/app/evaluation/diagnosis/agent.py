@@ -128,7 +128,7 @@ class DiagnosisAgent:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     async def generate_report(
         self,

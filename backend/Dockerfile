@@ -18,6 +18,9 @@ COPY . .
 # Create data directory for persistent storage
 RUN mkdir -p /app/data/chromadb /app/data/raw /app/data/golden_sets /app/data/processed
 
+# Make entrypoint executable
+RUN chmod +x /app/entrypoint.sh
+
 # Expose port
 EXPOSE 8000
 
@@ -25,5 +28,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run with uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run entrypoint script
+CMD ["/app/entrypoint.sh"]

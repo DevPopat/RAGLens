@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Script to ingest Bitext dataset into ChromaDB."""
 import asyncio
+import os
 import sys
 from pathlib import Path
 
-# Add backend to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
+# Add correct path for both local and Docker environments
+script_dir = Path(__file__).parent.parent
+if (script_dir / "backend").exists():
+    # Local: /project/backend
+    sys.path.insert(0, str(script_dir / "backend"))
+else:
+    # Docker: /app (app module is directly here)
+    sys.path.insert(0, str(script_dir))
 
 from app.core.ingestion.loader import BitetDatasetLoader
 from app.core.ingestion.chunker import BitetChunker
@@ -26,16 +33,20 @@ async def main():
     logger.info("Starting Bitext dataset ingestion")
     logger.info("=" * 60)
 
-    # Step 1: Load dataset
-    logger.info("\n[1/4] Loading Bitext dataset...")
+    # Step 1: Load dataset and create 80/20 train/test split
+    logger.info("\n[1/4] Loading Bitext dataset and creating train/test split...")
     loader = BitetDatasetLoader(raw_data_path=settings.raw_data_path)
-    qa_items = await loader.load_or_download()
+    train_items, test_items = loader.load_and_split(test_size=0.2, random_seed=42)
+
+    # Only index training data; test set is held out for evaluation
+    qa_items = train_items
 
     # Get stats
     stats = loader.get_dataset_stats(qa_items)
-    logger.info(f"Dataset loaded: {stats['total']} Q&A pairs")
-    logger.info(f"Categories: {stats['categories']}, Intents: {stats['intents']}")
-    logger.info(f"Top categories: {stats['top_categories'][:5]}")
+    logger.info(f"Training set: {stats['total']} Q&A pairs")
+    logger.info(f"Test holdout: {len(test_items)} Q&A pairs (saved to bitext_test_holdout.json)")
+    logger.info(f"Categories: {stats['categories']['count']}, Intents: {stats['intents']['count']}")
+    logger.info(f"Top categories: {stats['categories']['breakdown'][:5]}")
 
     # Step 2: Chunk documents
     logger.info("\n[2/4] Chunking documents...")
@@ -59,13 +70,8 @@ async def main():
     # Check if collection already has data
     existing_stats = vector_store.get_collection_stats()
     if existing_stats["total_chunks"] > 0:
-        logger.warning(f"Collection already contains {existing_stats['total_chunks']} chunks")
-        response = input("Reset collection and re-ingest? (yes/no): ")
-        if response.lower() == "yes":
-            vector_store.reset_collection()
-        else:
-            logger.info("Skipping ingestion. Exiting.")
-            return
+        logger.warning(f"Collection already contains {existing_stats['total_chunks']} chunks. Resetting...")
+        vector_store.reset_collection()
 
     # Step 4: Add to vector store
     logger.info("\n[4/4] Adding chunks to ChromaDB (this may take a while)...")
@@ -75,6 +81,7 @@ async def main():
     logger.info("\n" + "=" * 60)
     logger.info("Ingestion complete!")
     logger.info("=" * 60)
+    logger.info(f"Added {added_count} chunks")
     final_stats = vector_store.get_collection_stats()
     logger.info(f"Total chunks in collection: {final_stats['total_chunks']}")
     logger.info(f"Collection: {final_stats['collection_name']}")

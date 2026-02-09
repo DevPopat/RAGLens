@@ -39,6 +39,7 @@ services:
     volumes:
       - ./backend/data:/app/data
       - ./backend/app:/app/app
+      - ./scripts:/app/scripts
     depends_on:
       postgres:
         condition: service_healthy

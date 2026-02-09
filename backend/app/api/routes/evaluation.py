@@ -95,7 +95,7 @@ async def run_evaluation(
             evaluation_type=evaluation.evaluation_type,
             scores=evaluation.scores_json,
             evaluator=evaluation.evaluator,
-            metadata=evaluation.metadata,
+            metadata=evaluation.eval_metadata,
             timestamp=evaluation.timestamp
         )
 
@@ -222,7 +222,7 @@ async def get_evaluation(
         evaluation_type=evaluation.evaluation_type,
         scores=evaluation.scores_json,
         evaluator=evaluation.evaluator,
-        metadata=evaluation.metadata,
+        metadata=evaluation.eval_metadata,
         timestamp=evaluation.timestamp
     )
 
@@ -261,7 +261,7 @@ async def list_evaluations(
                 evaluation_type=e.evaluation_type,
                 scores=e.scores_json,
                 evaluator=e.evaluator,
-                metadata=e.metadata,
+                metadata=e.eval_metadata,
                 timestamp=e.timestamp
             )
             for e in evaluations
@@ -295,7 +295,7 @@ async def get_evaluations_for_query(
                 evaluation_type=e.evaluation_type,
                 scores=e.scores_json,
                 evaluator=e.evaluator,
-                metadata=e.metadata,
+                metadata=e.eval_metadata,
                 timestamp=e.timestamp
             )
             for e in evaluations

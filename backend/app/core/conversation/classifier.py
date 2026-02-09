@@ -84,11 +84,11 @@ class MessageClassifier:
         self.provider = provider.lower()
 
         if self.provider == "anthropic":
-            self.client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
             # Use Haiku for fast, cheap classification
             self.model = model or "claude-3-haiku-20240307"
         elif self.provider == "openai":
-            self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key)
             self.model = model or "gpt-3.5-turbo"
         else:
             raise ValueError(f"Unsupported provider: {provider}")

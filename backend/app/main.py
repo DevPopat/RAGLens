@@ -1,9 +1,14 @@
 """FastAPI application entry point."""
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
 from app.db.database import engine, Base
@@ -14,6 +19,24 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log all requests with timing information."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+        logger.info(f"[{request_id}] {request.method} {request.url.path}")
+        try:
+            response = await call_next(request)
+            duration_ms = (time.time() - start_time) * 1000
+            logger.info(f"[{request_id}] {response.status_code} in {duration_ms:.0f}ms")
+            return response
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"[{request_id}] Failed after {duration_ms:.0f}ms: {e}", exc_info=True)
+            raise
 
 
 @asynccontextmanager
@@ -51,6 +74,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add request logging middleware
+app.add_middleware(RequestLoggingMiddleware)
+
 
 @app.get("/health")
 async def health_check():
@@ -70,6 +96,29 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+
+# Exception handlers
+@app.exception_handler(Exception)
+async def global_exception_handler(_request: Request, exc: Exception):
+    """Catch-all exception handler for unhandled errors."""
+    error_id = str(uuid.uuid4())[:8]
+    logger.error(f"Unhandled exception [{error_id}]: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "error_id": error_id}
+    )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def database_exception_handler(_request: Request, exc: SQLAlchemyError):
+    """Handle database errors with detailed logging."""
+    error_id = str(uuid.uuid4())[:8]
+    logger.error(f"Database error [{error_id}]: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Database error", "error_id": error_id}
+    )
 
 
 # Import and include routers

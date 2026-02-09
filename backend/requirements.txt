@@ -1,45 +1,45 @@
 # FastAPI and server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+fastapi
+uvicorn[standard]
+python-multipart
 
 # Database
-sqlalchemy==2.0.25
-psycopg2-binary==2.9.9
-asyncpg==0.29.0
-alembic==1.13.1
+sqlalchemy
+psycopg2-binary
+asyncpg
+alembic
 
 # Vector store and embeddings
-chromadb==0.4.22
-openai==1.10.0
+chromadb
 
 # LLM providers
-anthropic==0.18.0
+openai
+anthropic
 
 # Data processing
-tiktoken==0.5.2
-pandas==2.2.0
+tiktoken
+pandas
 
 # Utilities
-python-dotenv==1.0.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+python-dotenv
+pydantic
+pydantic-settings
 
 # HTTP and async
-httpx==0.26.0
-aiofiles==23.2.1
+httpx
+aiofiles
 
 # Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
-pytest-cov==4.1.0
+pytest
+pytest-asyncio
+pytest-cov
 
 # Evaluation
-ragas>=0.2.0
-langchain-anthropic>=0.3.0
-langchain-openai>=0.3.0
+ragas
+langchain-anthropic
+langchain-openai
 
 # Code quality
-black==24.1.1
-flake8==7.0.0
-mypy==1.8.0
+black
+flake8
+mypy
