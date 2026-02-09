@@ -2,6 +2,21 @@ import { useState, useCallback } from 'react';
 import { sendChatQuery } from '../api/chat';
 import type { Message, ChatResponse, Source } from '../types';
 
+const STORAGE_KEYS = {
+  messages: 'raglens_chat_messages',
+  sources: 'raglens_chat_sources',
+  lastResponse: 'raglens_chat_lastResponse',
+} as const;
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 interface UseChatReturn {
   messages: Message[];
   sources: Source[];
@@ -13,11 +28,26 @@ interface UseChatReturn {
 }
 
 export default function useChat(): UseChatReturn {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => loadFromStorage(STORAGE_KEYS.messages, []));
+  const [sources, setSources] = useState<Source[]>(() => loadFromStorage(STORAGE_KEYS.sources, []));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
+  const [lastResponse, setLastResponse] = useState<ChatResponse | null>(() => loadFromStorage(STORAGE_KEYS.lastResponse, null));
+
+  const persistMessages = useCallback((msgs: Message[]) => {
+    setMessages(msgs);
+    localStorage.setItem(STORAGE_KEYS.messages, JSON.stringify(msgs));
+  }, []);
+
+  const persistSources = useCallback((src: Source[]) => {
+    setSources(src);
+    localStorage.setItem(STORAGE_KEYS.sources, JSON.stringify(src));
+  }, []);
+
+  const persistLastResponse = useCallback((resp: ChatResponse | null) => {
+    setLastResponse(resp);
+    localStorage.setItem(STORAGE_KEYS.lastResponse, JSON.stringify(resp));
+  }, []);
 
   const sendMessage = useCallback(
     async (query: string, llmProvider: 'anthropic' | 'openai' = 'anthropic') => {
@@ -26,7 +56,8 @@ export default function useChat(): UseChatReturn {
 
       // Add user message immediately
       const userMessage: Message = { role: 'user', content: query };
-      setMessages((prev) => [...prev, userMessage]);
+      const updatedMessages = [...messages, userMessage];
+      persistMessages(updatedMessages);
 
       try {
         const response = await sendChatQuery({
@@ -37,19 +68,19 @@ export default function useChat(): UseChatReturn {
 
         // Add assistant response
         const assistantMessage: Message = { role: 'assistant', content: response.response };
-        setMessages((prev) => [...prev, assistantMessage]);
-        setSources(response.sources);
-        setLastResponse(response);
+        persistMessages([...updatedMessages, assistantMessage]);
+        persistSources(response.sources);
+        persistLastResponse(response);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
         setError(errorMessage);
         // Remove the user message on error
-        setMessages((prev) => prev.slice(0, -1));
+        persistMessages(messages);
       } finally {
         setIsLoading(false);
       }
     },
-    [messages]
+    [messages, persistMessages, persistSources, persistLastResponse]
   );
 
   const clearChat = useCallback(() => {
@@ -57,6 +88,9 @@ export default function useChat(): UseChatReturn {
     setSources([]);
     setError(null);
     setLastResponse(null);
+    localStorage.removeItem(STORAGE_KEYS.messages);
+    localStorage.removeItem(STORAGE_KEYS.sources);
+    localStorage.removeItem(STORAGE_KEYS.lastResponse);
   }, []);
 
   return {

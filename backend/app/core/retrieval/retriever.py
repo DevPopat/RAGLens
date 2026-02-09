@@ -69,7 +69,7 @@ class RAGRetriever:
         rag_prompt = create_rag_prompt(query, contexts)
 
         # Select generator
-        if llm_provider == "claude":
+        if llm_provider == "anthropic":
             result = await self.claude_generator.generate(rag_prompt)
         elif llm_provider == "openai":
             result = await self.openai_generator.generate(rag_prompt)

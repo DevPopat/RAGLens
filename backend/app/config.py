@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # LLM Configuration
-    default_llm_provider: str = "claude"  # claude or openai
-    claude_model: str = "claude-3-5-sonnet-20241022"
+    default_llm_provider: str = "anthropic"  # anthropic or openai
+    claude_model: str = "claude-sonnet-4-20250514"
     openai_model: str = "gpt-4-turbo-preview"
     claude_eval_model: str = "claude-opus-4-20250514"  # For LLM-as-judge
     temperature: float = 0.7
