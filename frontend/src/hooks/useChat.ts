@@ -1,11 +1,9 @@
 import { useState, useCallback } from 'react';
 import { sendChatQuery } from '../api/chat';
-import type { Message, ChatResponse, Source } from '../types';
+import type { ChatMessage, Message, Source } from '../types';
 
 const STORAGE_KEYS = {
   messages: 'raglens_chat_messages',
-  sources: 'raglens_chat_sources',
-  lastResponse: 'raglens_chat_lastResponse',
 } as const;
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -17,36 +15,59 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function migrateMessages(raw: unknown[]): ChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+
+  // Recover old global sources for migration
+  const oldSources = loadFromStorage<Source[]>('raglens_chat_sources', []);
+
+  const migrated: ChatMessage[] = raw.map((msg: any) => ({
+    id: msg.id || crypto.randomUUID(),
+    role: msg.role,
+    content: msg.content,
+    ...(msg.role === 'assistant'
+      ? {
+          sources: msg.sources || [],
+          ...(msg.latency_ms != null ? { latency_ms: msg.latency_ms } : {}),
+          ...(msg.token_usage != null ? { token_usage: msg.token_usage } : {}),
+          ...(msg.cost != null ? { cost: msg.cost } : {}),
+        }
+      : {}),
+  }));
+
+  // Attach old global sources to the last assistant message if it has none
+  if (oldSources.length > 0) {
+    const lastAssistant = [...migrated].reverse().find((m) => m.role === 'assistant');
+    if (lastAssistant && (!lastAssistant.sources || lastAssistant.sources.length === 0)) {
+      lastAssistant.sources = oldSources;
+    }
+  }
+
+  return migrated;
+}
+
+function toConversationHistory(messages: ChatMessage[]): Message[] {
+  return messages.map(({ role, content }) => ({ role, content }));
+}
+
 interface UseChatReturn {
-  messages: Message[];
-  sources: Source[];
+  messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
-  lastResponse: ChatResponse | null;
   sendMessage: (query: string, llmProvider?: 'anthropic' | 'openai') => Promise<void>;
   clearChat: () => void;
 }
 
 export default function useChat(): UseChatReturn {
-  const [messages, setMessages] = useState<Message[]>(() => loadFromStorage(STORAGE_KEYS.messages, []));
-  const [sources, setSources] = useState<Source[]>(() => loadFromStorage(STORAGE_KEYS.sources, []));
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    migrateMessages(loadFromStorage(STORAGE_KEYS.messages, []))
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastResponse, setLastResponse] = useState<ChatResponse | null>(() => loadFromStorage(STORAGE_KEYS.lastResponse, null));
 
-  const persistMessages = useCallback((msgs: Message[]) => {
+  const persistMessages = useCallback((msgs: ChatMessage[]) => {
     setMessages(msgs);
     localStorage.setItem(STORAGE_KEYS.messages, JSON.stringify(msgs));
-  }, []);
-
-  const persistSources = useCallback((src: Source[]) => {
-    setSources(src);
-    localStorage.setItem(STORAGE_KEYS.sources, JSON.stringify(src));
-  }, []);
-
-  const persistLastResponse = useCallback((resp: ChatResponse | null) => {
-    setLastResponse(resp);
-    localStorage.setItem(STORAGE_KEYS.lastResponse, JSON.stringify(resp));
   }, []);
 
   const sendMessage = useCallback(
@@ -55,7 +76,11 @@ export default function useChat(): UseChatReturn {
       setError(null);
 
       // Add user message immediately
-      const userMessage: Message = { role: 'user', content: query };
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: query,
+      };
       const updatedMessages = [...messages, userMessage];
       persistMessages(updatedMessages);
 
@@ -63,14 +88,20 @@ export default function useChat(): UseChatReturn {
         const response = await sendChatQuery({
           query,
           llm_provider: llmProvider,
-          conversation_history: messages,
+          conversation_history: toConversationHistory(messages),
         });
 
-        // Add assistant response
-        const assistantMessage: Message = { role: 'assistant', content: response.response };
+        // Add assistant response with its sources and metrics
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: response.response,
+          sources: response.sources,
+          latency_ms: response.latency_ms,
+          token_usage: response.token_usage,
+          cost: response.cost,
+        };
         persistMessages([...updatedMessages, assistantMessage]);
-        persistSources(response.sources);
-        persistLastResponse(response);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
         setError(errorMessage);
@@ -80,25 +111,21 @@ export default function useChat(): UseChatReturn {
         setIsLoading(false);
       }
     },
-    [messages, persistMessages, persistSources, persistLastResponse]
+    [messages, persistMessages]
   );
 
   const clearChat = useCallback(() => {
     setMessages([]);
-    setSources([]);
     setError(null);
-    setLastResponse(null);
     localStorage.removeItem(STORAGE_KEYS.messages);
-    localStorage.removeItem(STORAGE_KEYS.sources);
-    localStorage.removeItem(STORAGE_KEYS.lastResponse);
+    localStorage.removeItem('raglens_chat_lastResponse'); // Clean up deprecated key
+    localStorage.removeItem('raglens_chat_sources'); // Clean up deprecated key
   }, []);
 
   return {
     messages,
-    sources,
     isLoading,
     error,
-    lastResponse,
     sendMessage,
     clearChat,
   };

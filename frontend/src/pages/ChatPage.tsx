@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2, Clock, Coins, Zap } from 'lucide-react';
 import ChatWindow from '../components/chat/ChatWindow';
 import ChatInput from '../components/chat/ChatInput';
@@ -7,10 +7,19 @@ import Button from '../components/common/Button';
 import useChat from '../hooks/useChat';
 
 export default function ChatPage() {
-  const { messages, sources, isLoading, error, lastResponse, sendMessage, clearChat } =
-    useChat();
+  const { messages, isLoading, error, sendMessage, clearChat } = useChat();
   const [sourcesExpanded, setSourcesExpanded] = useState(true);
   const [llmProvider, setLlmProvider] = useState<'anthropic' | 'openai'>('anthropic');
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+
+  // Auto-select the last assistant message when messages change
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    setSelectedMessageId(lastAssistant?.id ?? null);
+  }, [messages]);
+
+  const selectedMessage = messages.find((m) => m.id === selectedMessageId);
+  const displayedSources = selectedMessage?.sources ?? [];
 
   const handleSendMessage = (message: string) => {
     sendMessage(message, llmProvider);
@@ -32,20 +41,24 @@ export default function ChatPage() {
           </select>
         </div>
         <div className="flex items-center gap-3">
-          {lastResponse && (
+          {selectedMessage?.token_usage && (
             <div className="flex items-center gap-4 text-sm text-gray-500">
-              <span className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
-                {Math.round(lastResponse.latency_ms)}ms
-              </span>
+              {selectedMessage.latency_ms != null && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {Math.round(selectedMessage.latency_ms)}ms
+                </span>
+              )}
               <span className="flex items-center gap-1">
                 <Zap className="w-4 h-4" />
-                {lastResponse.token_usage.total_tokens} tokens
+                {selectedMessage.token_usage.total_tokens} tokens
               </span>
-              <span className="flex items-center gap-1">
-                <Coins className="w-4 h-4" />$
-                {lastResponse.cost.toFixed(4)}
-              </span>
+              {selectedMessage.cost != null && (
+                <span className="flex items-center gap-1">
+                  <Coins className="w-4 h-4" />$
+                  {selectedMessage.cost.toFixed(4)}
+                </span>
+              )}
             </div>
           )}
           <Button
@@ -70,7 +83,12 @@ export default function ChatPage() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col">
-          <ChatWindow messages={messages} isLoading={isLoading} />
+          <ChatWindow
+            messages={messages}
+            isLoading={isLoading}
+            selectedMessageId={selectedMessageId}
+            onSelectMessage={setSelectedMessageId}
+          />
           <ChatInput
             onSend={handleSendMessage}
             isLoading={isLoading}
@@ -78,7 +96,7 @@ export default function ChatPage() {
           />
         </div>
         <SourcesPanel
-          sources={sources}
+          sources={displayedSources}
           isExpanded={sourcesExpanded}
           onToggle={() => setSourcesExpanded(!sourcesExpanded)}
         />

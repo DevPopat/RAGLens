@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { FileText, ChevronRight } from 'lucide-react';
 import type { Source } from '../../types';
 import ScoreBar from '../common/ScoreBar';
@@ -51,26 +52,43 @@ interface SourceCardProps {
 }
 
 function SourceCard({ source, index }: SourceCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm">
+    <div
+      onClick={() => setExpanded(!expanded)}
+      className="bg-white rounded-lg border border-gray-200 p-3 text-sm cursor-pointer hover:border-gray-300 transition-colors"
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="font-medium text-gray-700">Source {index + 1}</span>
         <ScoreBar score={source.score} size="sm" showPercentage={true} className="w-20" />
       </div>
-      <p className="text-gray-600 text-xs line-clamp-4">{source.text}</p>
+      <p className={`text-gray-600 text-xs ${expanded ? '' : 'line-clamp-4'}`}>{source.text}</p>
       {source.metadata && Object.keys(source.metadata).length > 0 && (
         <div className="mt-2 pt-2 border-t border-gray-100">
           <div className="flex flex-wrap gap-1">
-            {source.metadata.category != null && (
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">
-                {String(source.metadata.category)}
-              </span>
-            )}
-            {source.metadata.intent != null && (
-              <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded text-xs">
-                {String(source.metadata.intent)}
-              </span>
-            )}
+            {expanded
+              ? Object.entries(source.metadata).map(([key, value]) => (
+                  <span
+                    key={key}
+                    className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
+                  >
+                    {key}: {String(value)}
+                  </span>
+                ))
+              : <>
+                  {source.metadata.category != null && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">
+                      {String(source.metadata.category)}
+                    </span>
+                  )}
+                  {source.metadata.intent != null && (
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded text-xs">
+                      {String(source.metadata.intent)}
+                    </span>
+                  )}
+                </>
+            }
           </div>
         </div>
       )}

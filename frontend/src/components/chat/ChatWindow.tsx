@@ -1,14 +1,16 @@
 import { useRef, useEffect } from 'react';
 import { Bot, Loader2 } from 'lucide-react';
 import MessageBubble from './MessageBubble';
-import type { Message } from '../../types';
+import type { ChatMessage } from '../../types';
 
 interface ChatWindowProps {
-  messages: Message[];
+  messages: ChatMessage[];
   isLoading: boolean;
+  selectedMessageId: string | null;
+  onSelectMessage: (id: string) => void;
 }
 
-export default function ChatWindow({ messages, isLoading }: ChatWindowProps) {
+export default function ChatWindow({ messages, isLoading, selectedMessageId, onSelectMessage }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,8 +39,13 @@ export default function ChatWindow({ messages, isLoading }: ChatWindowProps) {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-3xl mx-auto space-y-6">
-        {messages.map((message, index) => (
-          <MessageBubble key={index} message={message} />
+        {messages.map((message) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            isSelected={message.id === selectedMessageId}
+            onSelect={message.role === 'assistant' ? () => onSelectMessage(message.id) : undefined}
+          />
         ))}
         {isLoading && (
           <div className="flex gap-3 animate-fade-in">

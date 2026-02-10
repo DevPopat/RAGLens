@@ -1,12 +1,15 @@
 import { User, Bot } from 'lucide-react';
-import type { Message } from '../../types';
+import type { ChatMessage } from '../../types';
 
 interface MessageBubbleProps {
-  message: Message;
+  message: ChatMessage;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default function MessageBubble({ message, isSelected = false, onSelect }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const isClickable = !!onSelect;
 
   return (
     <div
@@ -24,10 +27,15 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         )}
       </div>
       <div
+        onClick={onSelect}
         className={`max-w-[70%] rounded-2xl px-4 py-3 ${
           isUser
             ? 'bg-primary-600 text-white rounded-br-md'
             : 'bg-gray-100 text-gray-900 rounded-bl-md'
+        } ${
+          isClickable ? 'cursor-pointer hover:ring-2 hover:ring-primary-300 transition-shadow' : ''
+        } ${
+          isSelected ? 'ring-2 ring-primary-500' : ''
         }`}
       >
         <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>

@@ -4,6 +4,16 @@ export interface Message {
   content: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  latency_ms?: number;
+  token_usage?: TokenUsage;
+  cost?: number;
+}
+
 export interface Source {
   id: string;
   text: string;
