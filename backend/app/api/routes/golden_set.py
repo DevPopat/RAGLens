@@ -550,11 +550,11 @@ async def _run_evaluation_task(
     This is called asynchronously after the API returns.
     """
     # Import here to avoid circular imports
-    from app.db.database import async_session_maker
+    from app.db.database import AsyncSessionLocal
     from app.core.retrieval.retriever import RAGRetriever
     from app.evaluation.ragas import RAGASEvaluator
 
-    async with async_session_maker() as db:
+    async with AsyncSessionLocal() as db:
         try:
             # Update status to running
             run = await db.get(EvaluationRun, run_id)
@@ -570,7 +570,7 @@ async def _run_evaluation_task(
             test_cases = result.scalars().all()
 
             # Initialize RAG and RAGAS evaluator
-            retriever = RAGRetriever(llm_provider=config.llm_provider)
+            retriever = RAGRetriever()
             evaluator = RAGASEvaluator(provider=config.evaluator_provider)
 
             results = []
@@ -582,8 +582,9 @@ async def _run_evaluation_task(
                 try:
                     # Run RAG pipeline
                     rag_result = await retriever.query(
-                        query=tc.query,
-                        top_k=config.top_k
+                        query_text=tc.query,
+                        top_k=config.top_k,
+                        llm_provider=config.llm_provider
                     )
 
                     # Evaluate response with RAGAS (with ground truth)
@@ -626,7 +627,7 @@ async def _run_evaluation_task(
                 "completed": completed,
                 "failed": failed,
                 "avg_score": round(avg_score, 2) if avg_score else None,
-                "pass_rate": round(completed / len(test_cases) * 100, 1) if test_cases else 0,
+                "pass_rate": round(completed / len(test_cases), 3) if test_cases else 0,
                 "evaluation_type": "ragas"
             }
 

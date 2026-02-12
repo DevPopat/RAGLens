@@ -80,8 +80,7 @@ def compute_overall_score(
         config: Optional custom weights
 
     Returns:
-        Overall score scaled to 0-5 for backward compatibility with diagnosis agent.
-        Returns None if no valid scores.
+        Overall score in 0-1 range. Returns None if no valid scores.
     """
     config = config or RAGASMetricConfig()
     weights = (
@@ -101,9 +100,8 @@ def compute_overall_score(
     if total_weight == 0:
         return None
 
-    # RAGAS returns 0-1, we scale to 0-5 for backward compatibility
     normalized_score = weighted_sum / total_weight
-    return round(normalized_score * 5, 2)
+    return round(normalized_score, 4)
 
 
 # Mapping from RAGAS internal metric names to our standardized names

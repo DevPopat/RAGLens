@@ -7,10 +7,11 @@ import Button from '../components/common/Button';
 import useChat from '../hooks/useChat';
 
 export default function ChatPage() {
-  const { messages, isLoading, error, sendMessage, clearChat } = useChat();
+  const { messages, isLoading, error, sendMessage, regenerateMessage, evaluateMessage, clearChat } = useChat();
   const [sourcesExpanded, setSourcesExpanded] = useState(true);
   const [llmProvider, setLlmProvider] = useState<'anthropic' | 'openai'>('anthropic');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
   // Auto-select the last assistant message when messages change
   useEffect(() => {
@@ -23,6 +24,18 @@ export default function ChatPage() {
 
   const handleSendMessage = (message: string) => {
     sendMessage(message, llmProvider);
+  };
+
+  const handleRunEvaluation = async () => {
+    if (!selectedMessageId) return;
+    setIsEvaluating(true);
+    try {
+      await evaluateMessage(selectedMessageId, llmProvider);
+    } catch {
+      // Error is shown via the evaluation result itself
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   return (
@@ -88,6 +101,7 @@ export default function ChatPage() {
             isLoading={isLoading}
             selectedMessageId={selectedMessageId}
             onSelectMessage={setSelectedMessageId}
+            onRegenerate={(messageId) => regenerateMessage(messageId, llmProvider)}
           />
           <ChatInput
             onSend={handleSendMessage}
@@ -99,6 +113,13 @@ export default function ChatPage() {
           sources={displayedSources}
           isExpanded={sourcesExpanded}
           onToggle={() => setSourcesExpanded(!sourcesExpanded)}
+          evaluation={selectedMessage?.evaluation}
+          isEvaluating={isEvaluating}
+          onRunEvaluation={
+            selectedMessage?.role === 'assistant' && selectedMessage?.query_id && displayedSources.length > 0
+              ? handleRunEvaluation
+              : undefined
+          }
         />
       </div>
     </div>

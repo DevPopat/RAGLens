@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:docs.ragas.io)"
+      "WebFetch(domain:docs.ragas.io)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

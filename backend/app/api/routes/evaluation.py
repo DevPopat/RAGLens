@@ -21,6 +21,7 @@ from app.api.schemas.evaluation import (
     BatchEvaluationResponse
 )
 from app.evaluation.ragas import RAGASEvaluator
+from app.api.routes.chat import _format_history_for_evaluation
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,22 @@ async def run_evaluation(
         # Parse contexts from response
         contexts = response_obj.sources_json or []
 
+        # Enrich query with conversation history if provided
+        eval_query = query_obj.query_text
+        has_context = False
+        if request.conversation_history:
+            history_context = _format_history_for_evaluation(request.conversation_history)
+            if history_context:
+                eval_query = f"Conversation context:\n{history_context}\n\nCurrent question: {query_obj.query_text}"
+                has_context = True
+
         # Run RAGAS evaluation
         evaluator = RAGASEvaluator(
             provider=request.evaluator_provider or "anthropic"
         )
 
         evaluation_result = await evaluator.evaluate_response(
-            query=query_obj.query_text,
+            query=eval_query,
             response=response_obj.response_text,
             contexts=contexts,
             expected_answer=None  # No ground truth for single query evaluation
@@ -80,6 +90,7 @@ async def run_evaluation(
                 "expected_category": request.expected_category,
                 "expected_intent": request.expected_intent,
                 "has_ground_truth": evaluation_result.get("has_ground_truth", False),
+                "has_conversation_context": has_context,
                 "metrics_used": evaluation_result.get("metrics_used", [])
             },
             timestamp=datetime.utcnow()

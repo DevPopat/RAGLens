@@ -80,7 +80,7 @@ class GoldenTestSet(Base):
 
     # Relationships
     test_cases = relationship("GoldenTestCase", back_populates="test_set", cascade="all, delete-orphan")
-    evaluation_runs = relationship("EvaluationRun", back_populates="test_set")
+    evaluation_runs = relationship("EvaluationRun", back_populates="test_set", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<GoldenTestSet(id={self.id}, name='{self.name}')>"

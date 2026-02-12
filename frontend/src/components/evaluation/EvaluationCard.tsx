@@ -20,7 +20,7 @@ export default function EvaluationCard({ evaluation, onClick }: EvaluationCardPr
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
             <Badge variant="info">{evaluation.evaluation_type}</Badge>
-            {evaluation.metadata.has_ground_truth && (
+            {evaluation.metadata?.has_ground_truth && (
               <Badge variant="success">Has Ground Truth</Badge>
             )}
           </div>
@@ -64,7 +64,7 @@ export function EvaluationDetailCard({ evaluation }: EvaluationDetailCardProps) 
             <Badge variant="info" size="md">
               {evaluation.evaluation_type.toUpperCase()}
             </Badge>
-            {evaluation.metadata.has_ground_truth && (
+            {evaluation.metadata?.has_ground_truth && (
               <Badge variant="success" size="md">
                 Ground Truth Available
               </Badge>
@@ -85,23 +85,23 @@ export function EvaluationDetailCard({ evaluation }: EvaluationDetailCardProps) 
       <ScoreDisplay scores={evaluation.scores} layout="horizontal" />
 
       {/* Metadata */}
-      {(evaluation.metadata.expected_category || evaluation.metadata.expected_intent) && (
+      {(evaluation.metadata?.expected_category || evaluation.metadata?.expected_intent) && (
         <div className="bg-gray-50 rounded-lg p-4">
           <h4 className="text-sm font-medium text-gray-700 mb-2">Expected Values</h4>
           <div className="flex gap-4">
-            {evaluation.metadata.expected_category && (
+            {evaluation.metadata?.expected_category && (
               <div>
                 <span className="text-xs text-gray-500">Category:</span>
                 <span className="ml-2 text-sm text-gray-900">
-                  {evaluation.metadata.expected_category}
+                  {evaluation.metadata?.expected_category}
                 </span>
               </div>
             )}
-            {evaluation.metadata.expected_intent && (
+            {evaluation.metadata?.expected_intent && (
               <div>
                 <span className="text-xs text-gray-500">Intent:</span>
                 <span className="ml-2 text-sm text-gray-900">
-                  {evaluation.metadata.expected_intent}
+                  {evaluation.metadata?.expected_intent}
                 </span>
               </div>
             )}
@@ -110,7 +110,7 @@ export function EvaluationDetailCard({ evaluation }: EvaluationDetailCardProps) 
       )}
 
       {/* Metrics Used */}
-      {evaluation.metadata.metrics_used && evaluation.metadata.metrics_used.length > 0 && (
+      {evaluation.metadata?.metrics_used && evaluation.metadata.metrics_used.length > 0 && (
         <div>
           <h4 className="text-sm font-medium text-gray-700 mb-2">Metrics Evaluated</h4>
           <div className="flex flex-wrap gap-2">

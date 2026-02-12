@@ -12,6 +12,20 @@ export interface ChatMessage {
   latency_ms?: number;
   token_usage?: TokenUsage;
   cost?: number;
+  query_id?: string;
+  evaluation?: EvaluationResult;
+}
+
+export interface EvaluationResult {
+  evaluation_type: string;
+  scores: EvaluationScores;
+  evaluator: string;
+  metadata?: {
+    has_ground_truth?: boolean;
+    has_conversation_context?: boolean;
+    metrics_used?: string[];
+  };
+  timestamp: string;
 }
 
 export interface Source {
@@ -63,6 +77,7 @@ export interface EvaluationRequest {
   evaluator_provider?: 'anthropic' | 'openai';
   expected_category?: string;
   expected_intent?: string;
+  conversation_history?: Message[];
 }
 
 export interface EvaluationResponse {

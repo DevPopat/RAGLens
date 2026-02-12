@@ -4,6 +4,8 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field
 
+from app.api.schemas.chat import ConversationMessage
+
 
 class EvaluationRequest(BaseModel):
     """Request to evaluate a query/response pair using RAGAS."""
@@ -20,6 +22,10 @@ class EvaluationRequest(BaseModel):
     expected_intent: Optional[str] = Field(
         None,
         description="Expected intent (for metadata only)"
+    )
+    conversation_history: Optional[List[ConversationMessage]] = Field(
+        None,
+        description="Previous messages for multi-turn conversation context"
     )
 
 

@@ -2,10 +2,11 @@
 
 Provides a unified interface for evaluating RAG responses using RAGAS metrics.
 """
+import asyncio
 import logging
 from typing import Dict, Any, List, Optional
 
-from ragas import evaluate
+from ragas import evaluate, EvaluationDataset
 
 from .llm_providers import get_ragas_llm, get_ragas_embeddings
 from .metrics import (
@@ -17,6 +18,12 @@ from .metrics import (
 from .data_adapter import convert_to_ragas_sample, create_ragas_dataset
 
 logger = logging.getLogger(__name__)
+
+
+def _run_ragas_evaluate(**kwargs):
+    """Run RAGAS evaluate with standard asyncio policy to avoid uvloop conflicts."""
+    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+    return evaluate(**kwargs)
 
 
 class RAGASEvaluator:
@@ -87,9 +94,11 @@ class RAGASEvaluator:
         metrics = get_metrics_for_evaluation(has_ground_truth)
 
         try:
-            # Run RAGAS evaluation
-            result = evaluate(
-                dataset=[sample],
+            # Run RAGAS evaluation in a separate thread to avoid
+            # nested event loop conflicts with uvloop
+            result = await asyncio.to_thread(
+                _run_ragas_evaluate,
+                dataset=EvaluationDataset(samples=[sample]),
                 metrics=metrics,
                 llm=self.llm,
                 embeddings=self.embeddings,
@@ -103,10 +112,10 @@ class RAGASEvaluator:
 
             return {
                 "scores": {
-                    "ragas": scores,
+                    **scores,
                     "overall_score": overall,
                 },
-                "overall_score": overall,  # Top-level for backward compatibility
+                "overall_score": overall,
                 "evaluator": f"ragas/{self.provider}",
                 "evaluation_type": "ragas",
                 "has_ground_truth": has_ground_truth,
@@ -158,8 +167,10 @@ class RAGASEvaluator:
         metrics = get_metrics_for_evaluation(all_have_ground_truth)
 
         try:
-            # Run RAGAS evaluation on full batch
-            result = evaluate(
+            # Run RAGAS evaluation on full batch in a separate thread
+            # to avoid nested event loop conflicts with uvloop
+            result = await asyncio.to_thread(
+                _run_ragas_evaluate,
                 dataset=dataset,
                 metrics=metrics,
                 llm=self.llm,
@@ -176,7 +187,7 @@ class RAGASEvaluator:
                 results.append(
                     {
                         "scores": {
-                            "ragas": scores,
+                            **scores,
                             "overall_score": overall,
                         },
                         "overall_score": overall,

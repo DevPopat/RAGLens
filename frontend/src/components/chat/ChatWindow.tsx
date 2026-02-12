@@ -8,9 +8,10 @@ interface ChatWindowProps {
   isLoading: boolean;
   selectedMessageId: string | null;
   onSelectMessage: (id: string) => void;
+  onRegenerate: (messageId: string) => void;
 }
 
-export default function ChatWindow({ messages, isLoading, selectedMessageId, onSelectMessage }: ChatWindowProps) {
+export default function ChatWindow({ messages, isLoading, selectedMessageId, onSelectMessage, onRegenerate }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,6 +46,8 @@ export default function ChatWindow({ messages, isLoading, selectedMessageId, onS
             message={message}
             isSelected={message.id === selectedMessageId}
             onSelect={message.role === 'assistant' ? () => onSelectMessage(message.id) : undefined}
+            onRegenerate={message.role === 'assistant' ? () => onRegenerate(message.id) : undefined}
+            isLoading={isLoading}
           />
         ))}
         {isLoading && (

@@ -61,6 +61,8 @@ export default function ScoreDisplay({ scores, layout = 'vertical' }: ScoreDispl
           <ScoreBar key={metric.key} score={metric.value} label={metric.label} size="md" />
         ))}
       </div>
+      <div className="flex justify-center">
+      </div>
     </div>
   );
 }

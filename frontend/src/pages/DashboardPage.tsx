@@ -87,9 +87,9 @@ export default function DashboardPage() {
             <Card className="lg:col-span-2">
               <CardHeader
                 title="Active Alerts"
-                subtitle={`${summary.alerts.length} alert${summary.alerts.length !== 1 ? 's' : ''} requiring attention`}
+                subtitle={`${summary.alerts?.length ?? 0} alert${(summary.alerts?.length ?? 0) !== 1 ? 's' : ''} requiring attention`}
               />
-              <AlertList alerts={summary.alerts} maxItems={5} />
+              <AlertList alerts={summary.alerts ?? []} maxItems={5} />
             </Card>
 
             {/* Quick Actions */}
@@ -136,7 +136,7 @@ export default function DashboardPage() {
 
           {/* Top Issues & Suggestions */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            {summary.top_issues.length > 0 && (
+            {summary.top_issues?.length > 0 && (
               <Card>
                 <CardHeader title="Top Issues" subtitle="Most common problems identified" />
                 <ul className="space-y-2">
@@ -153,7 +153,7 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {summary.improvement_suggestions.length > 0 && (
+            {summary.improvement_suggestions?.length > 0 && (
               <Card>
                 <CardHeader
                   title="Improvement Suggestions"

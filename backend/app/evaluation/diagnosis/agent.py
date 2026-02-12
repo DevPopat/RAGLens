@@ -86,7 +86,7 @@ DIAGNOSIS_PROMPT = """You are a RAG system diagnostician. Analyze these evaluati
 
 EVALUATION SUMMARY:
 - Total evaluations: {total_evaluations}
-- Average score: {avg_score:.2f}/5
+- Average score: {avg_score:.0%}
 - Period: {period_start} to {period_end}
 
 SCORE BREAKDOWN BY CATEGORY:
@@ -95,7 +95,7 @@ SCORE BREAKDOWN BY CATEGORY:
 SCORE BREAKDOWN BY INTENT:
 {intent_breakdown}
 
-LOW-SCORING QUERIES (score < 3.5):
+LOW-SCORING QUERIES (score < 70%):
 {low_scoring_queries}
 
 SCORE DISTRIBUTION:
@@ -214,7 +214,7 @@ class DiagnosisAgent:
         category_scores = defaultdict(list)
         intent_scores = defaultdict(list)
         low_scoring = []
-        score_buckets = {"1-2": 0, "2-3": 0, "3-4": 0, "4-5": 0}
+        score_buckets = {"0-25%": 0, "25-50%": 0, "50-75%": 0, "75-100%": 0}
 
         for eval_obj, query_obj in rows:
             score = None
@@ -238,17 +238,17 @@ class DiagnosisAgent:
                 intent_scores[intent].append(score)
 
                 # Bucket distribution
-                if score < 2:
-                    score_buckets["1-2"] += 1
-                elif score < 3:
-                    score_buckets["2-3"] += 1
-                elif score < 4:
-                    score_buckets["3-4"] += 1
+                if score < 0.25:
+                    score_buckets["0-25%"] += 1
+                elif score < 0.5:
+                    score_buckets["25-50%"] += 1
+                elif score < 0.75:
+                    score_buckets["50-75%"] += 1
                 else:
-                    score_buckets["4-5"] += 1
+                    score_buckets["75-100%"] += 1
 
                 # Track low-scoring
-                if score < 3.5:
+                if score < 0.7:
                     low_scoring.append({
                         "query": query_obj.query_text[:100],
                         "score": score,
@@ -293,17 +293,17 @@ class DiagnosisAgent:
         """Use LLM to analyze metrics and identify issues."""
         # Format metrics for prompt
         category_str = "\n".join([
-            f"  {cat}: avg={data['avg']:.2f}, count={data['count']}"
+            f"  {cat}: avg={data['avg']:.0%}, count={data['count']}"
             for cat, data in metrics.get("category_breakdown", {}).items()
         ])
 
         intent_str = "\n".join([
-            f"  {intent}: avg={data['avg']:.2f}, count={data['count']}"
+            f"  {intent}: avg={data['avg']:.0%}, count={data['count']}"
             for intent, data in list(metrics.get("intent_breakdown", {}).items())[:10]
         ])
 
         low_scoring_str = "\n".join([
-            f"  - \"{q['query'][:50]}...\" (score: {q['score']:.1f}, {q['category']}/{q['intent']})"
+            f"  - \"{q['query'][:50]}...\" (score: {q['score']:.0%}, {q['category']}/{q['intent']})"
             for q in metrics.get("low_scoring_queries", [])[:5]
         ])
 
@@ -453,20 +453,20 @@ class DiagnosisAgent:
         alerts = []
 
         avg_score = metrics.get("avg_score")
-        if avg_score and avg_score < 3.5:
+        if avg_score and avg_score < 0.7:
             alerts.append({
                 "type": "low_avg_score",
-                "severity": "high" if avg_score < 3.0 else "medium",
-                "message": f"Average score is {avg_score:.2f}/5"
+                "severity": "high" if avg_score < 0.6 else "medium",
+                "message": f"Average score is {avg_score:.0%}"
             })
 
         # Check for categories with low scores
         for cat, data in metrics.get("category_breakdown", {}).items():
-            if data["avg"] < 3.0 and data["count"] >= 5:
+            if data["avg"] < 0.6 and data["count"] >= 5:
                 alerts.append({
                     "type": "low_category_score",
                     "severity": "medium",
-                    "message": f"Category '{cat}' has low avg score: {data['avg']:.2f}"
+                    "message": f"Category '{cat}' has low avg score: {data['avg']:.0%}"
                 })
 
         return {

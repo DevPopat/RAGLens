@@ -1,15 +1,27 @@
 import { useState } from 'react';
-import { FileText, ChevronRight } from 'lucide-react';
-import type { Source } from '../../types';
+import { FileText, ChevronRight, Activity, RefreshCw } from 'lucide-react';
+import type { Source, EvaluationResult } from '../../types';
 import ScoreBar from '../common/ScoreBar';
+import Button from '../common/Button';
+import { ScoreDetailButton } from '../evaluation/ScoreDetailModal';
 
 interface SourcesPanelProps {
   sources: Source[];
   isExpanded: boolean;
   onToggle: () => void;
+  evaluation?: EvaluationResult;
+  isEvaluating?: boolean;
+  onRunEvaluation?: () => void;
 }
 
-export default function SourcesPanel({ sources, isExpanded, onToggle }: SourcesPanelProps) {
+export default function SourcesPanel({
+  sources,
+  isExpanded,
+  onToggle,
+  evaluation,
+  isEvaluating,
+  onRunEvaluation,
+}: SourcesPanelProps) {
   if (sources.length === 0) {
     return null;
   }
@@ -40,6 +52,75 @@ export default function SourcesPanel({ sources, isExpanded, onToggle }: SourcesP
               <SourceCard key={source.id || `source-${index}`} source={source} index={index} />
             ))}
           </div>
+
+          {/* Evaluation Section */}
+          {onRunEvaluation && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                RAGAS Evaluation
+              </h3>
+
+              {evaluation ? (
+                <div className="space-y-3">
+                  {evaluation.scores.overall_score != null && (
+                    <ScoreBar
+                      score={evaluation.scores.overall_score}
+                      label="Overall Score"
+                      size="md"
+                    />
+                  )}
+                  {evaluation.scores.context_precision != null && (
+                    <ScoreBar
+                      score={evaluation.scores.context_precision}
+                      label="Context Precision"
+                      size="sm"
+                    />
+                  )}
+                  {evaluation.scores.faithfulness != null && (
+                    <ScoreBar
+                      score={evaluation.scores.faithfulness}
+                      label="Faithfulness"
+                      size="sm"
+                    />
+                  )}
+                  {evaluation.scores.answer_relevancy != null && (
+                    <ScoreBar
+                      score={evaluation.scores.answer_relevancy}
+                      label="Answer Relevancy"
+                      size="sm"
+                    />
+                  )}
+                  <ScoreDetailButton scores={evaluation.scores} size="sm" />
+                  {evaluation.metadata?.has_conversation_context && (
+                    <p className="text-xs text-gray-400">
+                      Evaluated with conversation context
+                    </p>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onRunEvaluation}
+                    isLoading={isEvaluating}
+                    leftIcon={<RefreshCw className="w-3 h-3" />}
+                  >
+                    Re-evaluate
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRunEvaluation}
+                  isLoading={isEvaluating}
+                  leftIcon={<Activity className="w-4 h-4" />}
+                  className="w-full"
+                >
+                  Run Evaluation
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

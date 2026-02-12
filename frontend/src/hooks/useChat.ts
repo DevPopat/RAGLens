@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { sendChatQuery } from '../api/chat';
-import type { ChatMessage, Message, Source } from '../types';
+import { runEvaluation } from '../api/evaluation';
+import type { ChatMessage, EvaluationResult, Message, Source } from '../types';
 
 const STORAGE_KEYS = {
   messages: 'raglens_chat_messages',
@@ -55,6 +56,8 @@ interface UseChatReturn {
   isLoading: boolean;
   error: string | null;
   sendMessage: (query: string, llmProvider?: 'anthropic' | 'openai') => Promise<void>;
+  regenerateMessage: (messageId: string, llmProvider?: 'anthropic' | 'openai') => Promise<void>;
+  evaluateMessage: (messageId: string, evaluatorProvider?: 'anthropic' | 'openai') => Promise<EvaluationResult | null>;
   clearChat: () => void;
 }
 
@@ -100,6 +103,7 @@ export default function useChat(): UseChatReturn {
           latency_ms: response.latency_ms,
           token_usage: response.token_usage,
           cost: response.cost,
+          query_id: response.query_id,
         };
         persistMessages([...updatedMessages, assistantMessage]);
       } catch (err) {
@@ -110,6 +114,105 @@ export default function useChat(): UseChatReturn {
       } finally {
         setIsLoading(false);
       }
+    },
+    [messages, persistMessages]
+  );
+
+  const regenerateMessage = useCallback(
+    async (messageId: string, llmProvider: 'anthropic' | 'openai' = 'anthropic') => {
+      const msgIndex = messages.findIndex((m) => m.id === messageId);
+      if (msgIndex === -1 || messages[msgIndex].role !== 'assistant') return;
+
+      // Find the preceding user message to get the original query
+      const userMsg = messages
+        .slice(0, msgIndex)
+        .reverse()
+        .find((m) => m.role === 'user');
+      if (!userMsg) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      // Conversation history is everything before the user message
+      const userMsgIndex = messages.indexOf(userMsg);
+      const historyBefore = messages.slice(0, userMsgIndex);
+
+      try {
+        const response = await sendChatQuery({
+          query: userMsg.content,
+          llm_provider: llmProvider,
+          conversation_history: toConversationHistory(historyBefore),
+        });
+
+        // Replace the assistant message in-place
+        const updated = [...messages];
+        updated[msgIndex] = {
+          ...updated[msgIndex],
+          content: response.response,
+          sources: response.sources,
+          latency_ms: response.latency_ms,
+          token_usage: response.token_usage,
+          cost: response.cost,
+          query_id: response.query_id,
+          evaluation: undefined,
+        };
+        persistMessages(updated);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate message';
+        setError(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages, persistMessages]
+  );
+
+  const evaluateMessage = useCallback(
+    async (
+      messageId: string,
+      evaluatorProvider: 'anthropic' | 'openai' = 'anthropic'
+    ): Promise<EvaluationResult | null> => {
+      const msgIndex = messages.findIndex((m) => m.id === messageId);
+      if (msgIndex === -1 || messages[msgIndex].role !== 'assistant') return null;
+
+      const assistantMsg = messages[msgIndex];
+      if (!assistantMsg.query_id) return null;
+
+      // Find the preceding user message
+      const userMsg = messages
+        .slice(0, msgIndex)
+        .reverse()
+        .find((m) => m.role === 'user');
+      if (!userMsg) return null;
+
+      // Build conversation history from all messages before the user message
+      const userMsgIndex = messages.indexOf(userMsg);
+      const historyBefore = messages.slice(0, userMsgIndex);
+      const conversationHistory = historyBefore.length > 0
+        ? toConversationHistory(historyBefore)
+        : undefined;
+
+      const response = await runEvaluation({
+        query_id: assistantMsg.query_id,
+        evaluator_provider: evaluatorProvider,
+        conversation_history: conversationHistory,
+      });
+
+      // Map backend response to EvaluationResult
+      const result: EvaluationResult = {
+        evaluation_type: response.evaluation_type,
+        scores: response.scores,
+        evaluator: response.evaluator,
+        metadata: response.metadata,
+        timestamp: response.timestamp,
+      };
+
+      // Attach result to the message and persist
+      const updated = [...messages];
+      updated[msgIndex] = { ...updated[msgIndex], evaluation: result };
+      persistMessages(updated);
+
+      return result;
     },
     [messages, persistMessages]
   );
@@ -127,6 +230,8 @@ export default function useChat(): UseChatReturn {
     isLoading,
     error,
     sendMessage,
+    regenerateMessage,
+    evaluateMessage,
     clearChat,
   };
 }

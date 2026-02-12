@@ -168,10 +168,10 @@ export default function GoldenSetDetailPage() {
 
     setIsSubmitting(true);
     try {
-      const run = await runTestSet(id, runConfig);
+      await runTestSet(id, runConfig);
       addNotification('success', 'Evaluation started. Check the runs tab for results.');
       setIsRunModalOpen(false);
-      setRuns((prev) => [run, ...prev]);
+      fetchRuns();
     } catch (err) {
       addNotification('error', err instanceof Error ? err.message : 'Failed to start evaluation');
     } finally {
@@ -250,7 +250,7 @@ export default function GoldenSetDetailPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">
-              Evaluation Run: {selectedRun.config_snapshot.run_name || 'Unnamed Run'}
+              Evaluation Run: {selectedRun.config_snapshot?.run_name || 'Unnamed Run'}
             </h2>
             <Button variant="ghost" size="sm" onClick={() => setSelectedRun(null)}>
               Close
@@ -443,7 +443,7 @@ export default function GoldenSetDetailPage() {
               >
                 <div>
                   <p className="font-medium text-gray-900">
-                    {run.config_snapshot.run_name || 'Unnamed Run'}
+                    {run.config_snapshot?.run_name || 'Unnamed Run'}
                   </p>
                   <p className="text-sm text-gray-500">
                     {new Date(run.started_at).toLocaleString()}
@@ -451,7 +451,7 @@ export default function GoldenSetDetailPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={run.status} />
-                  {run.results_json && (
+                  {run.results_json?.summary?.avg_score != null && (
                     <span className="text-sm font-medium text-gray-700">
                       {Math.round(run.results_json.summary.avg_score * 100)}% avg
                     </span>
