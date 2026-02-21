@@ -3,9 +3,22 @@
 RAGAS expects a specific data format for evaluation. This module handles
 the conversion from our internal formats.
 """
+import re
 from typing import List, Dict, Any, Optional
 
 from ragas import EvaluationDataset, SingleTurnSample
+
+
+def _strip_qa_prefix(text: str) -> str:
+    """Strip the 'Q: ...' prefix from Q&A-formatted chunks.
+
+    Our chunks are stored as 'Q: <question>\\nA: <answer>'. For RAGAS
+    evaluation the question is already provided separately as user_input,
+    so we strip it to avoid confusing the LLM judge (especially for
+    context precision, which compares each context against the response).
+    """
+    stripped = re.sub(r"^Q:\s*.*?\nA:\s*", "", text, count=1, flags=re.DOTALL)
+    return stripped if stripped != text else text
 
 
 def convert_contexts_from_sources(sources_json: List[Dict[str, Any]]) -> List[str]:
@@ -23,7 +36,7 @@ def convert_contexts_from_sources(sources_json: List[Dict[str, Any]]) -> List[st
     Returns:
         List of context text strings
     """
-    return [src.get("text", "") for src in sources_json if src.get("text")]
+    return [_strip_qa_prefix(src.get("text", "")) for src in sources_json if src.get("text")]
 
 
 def convert_to_ragas_sample(

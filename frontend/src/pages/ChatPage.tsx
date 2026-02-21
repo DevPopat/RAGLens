@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Trash2, Clock, Coins, Zap } from 'lucide-react';
 import ChatWindow from '../components/chat/ChatWindow';
 import ChatInput from '../components/chat/ChatInput';
@@ -12,6 +12,7 @@ export default function ChatPage() {
   const [llmProvider, setLlmProvider] = useState<'anthropic' | 'openai'>('anthropic');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [selectedSources, setSelectedSources] = useState<Set<number>>(new Set());
 
   // Auto-select the last assistant message when messages change
   useEffect(() => {
@@ -19,8 +20,30 @@ export default function ChatPage() {
     setSelectedMessageId(lastAssistant?.id ?? null);
   }, [messages]);
 
+  // Reset source selection when switching messages
+  useEffect(() => {
+    setSelectedSources(new Set());
+  }, [selectedMessageId]);
+
   const selectedMessage = messages.find((m) => m.id === selectedMessageId);
   const displayedSources = selectedMessage?.sources ?? [];
+
+  const toggleSource = useCallback((idx: number) => {
+    setSelectedSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }, []);
+
+  const toggleAllSources = useCallback(() => {
+    setSelectedSources((prev) =>
+      prev.size === displayedSources.length
+        ? new Set()
+        : new Set(displayedSources.map((_, i) => i))
+    );
+  }, [displayedSources]);
 
   const handleSendMessage = (message: string) => {
     sendMessage(message, llmProvider);
@@ -102,6 +125,7 @@ export default function ChatPage() {
             selectedMessageId={selectedMessageId}
             onSelectMessage={setSelectedMessageId}
             onRegenerate={(messageId) => regenerateMessage(messageId, llmProvider)}
+            selectedSources={selectedSources}
           />
           <ChatInput
             onSend={handleSendMessage}
@@ -120,6 +144,9 @@ export default function ChatPage() {
               ? handleRunEvaluation
               : undefined
           }
+          selectedSources={selectedSources}
+          onToggleSource={toggleSource}
+          onToggleAllSources={toggleAllSources}
         />
       </div>
     </div>

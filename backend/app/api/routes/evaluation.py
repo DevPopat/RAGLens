@@ -3,6 +3,7 @@
 Endpoints for running evaluations and viewing results.
 """
 import logging
+import time
 from datetime import datetime
 from typing import Optional, List
 from uuid import UUID, uuid4
@@ -18,9 +19,15 @@ from app.api.schemas.evaluation import (
     EvaluationResponse,
     EvaluationListResponse,
     BatchEvaluationRequest,
-    BatchEvaluationResponse
+    BatchEvaluationResponse,
+    ClaimCompareRequest,
+    ClaimCompareResponse,
+    Claim,
 )
+import json
 from app.evaluation.ragas import RAGASEvaluator
+from app.core.generation.claude import ClaudeGenerator
+from app.core.generation.openai_gen import OpenAIGenerator
 from app.api.routes.chat import _format_history_for_evaluation
 from app.config import settings
 
@@ -72,12 +79,14 @@ async def run_evaluation(
             provider=request.evaluator_provider or "anthropic"
         )
 
+        eval_start = time.perf_counter()
         evaluation_result = await evaluator.evaluate_response(
             query=eval_query,
             response=response_obj.response_text,
             contexts=contexts,
             expected_answer=None  # No ground truth for single query evaluation
         )
+        eval_latency_ms = round((time.perf_counter() - eval_start) * 1000)
 
         # Store evaluation in database
         evaluation = Evaluation(
@@ -107,7 +116,8 @@ async def run_evaluation(
             scores=evaluation.scores_json,
             evaluator=evaluation.evaluator,
             metadata=evaluation.eval_metadata,
-            timestamp=evaluation.timestamp
+            timestamp=evaluation.timestamp,
+            latency_ms=eval_latency_ms,
         )
 
     except Exception as e:
@@ -315,3 +325,69 @@ async def get_evaluations_for_query(
         skip=0,
         limit=len(evaluations)
     )
+
+
+CLAIM_COMPARE_PROMPT = """You are comparing an expected answer against a generated answer.
+
+Extract every distinct factual claim from the expected answer. For each claim, determine whether the generated answer:
+- "covered": conveys the same information (even if worded differently)
+- "missing": does not mention this information at all
+- "contradicted": states something that conflicts with the claim
+
+For claims that are "covered" or "contradicted", include the exact quote from the generated answer that corresponds to the claim. The quote must be a verbatim substring of the generated answer.
+
+Expected answer:
+{expected_answer}
+
+Generated answer:
+{generated_answer}
+
+Respond with ONLY valid JSON — no markdown fences, no extra text:
+{{"claims": [
+  {{"claim": "...", "status": "covered|missing|contradicted", "detail": "brief explanation", "generated_quote": "exact substring from generated answer or null"}}
+]}}"""
+
+
+@router.post("/compare-claims", response_model=ClaimCompareResponse)
+async def compare_claims(request: ClaimCompareRequest):
+    """Compare expected vs generated answers at the claim level.
+
+    Decomposes the expected answer into factual claims and checks each
+    against the generated answer, returning status and relevant quotes.
+    """
+    try:
+        prompt = CLAIM_COMPARE_PROMPT.format(
+            expected_answer=request.expected_answer,
+            generated_answer=request.generated_answer,
+        )
+
+        if settings.default_llm_provider == "openai":
+            generator = OpenAIGenerator()
+        else:
+            generator = ClaudeGenerator()
+
+        result = await generator.generate(
+            prompt=prompt,
+            system_prompt="You are a precise factual comparison assistant. Respond only with valid JSON.",
+            temperature=0.0,
+        )
+
+        parsed = json.loads(result["text"])
+        claims = [
+            Claim(
+                claim=c["claim"],
+                status=c["status"],
+                detail=c["detail"],
+                generated_quote=c.get("generated_quote"),
+            )
+            for c in parsed["claims"]
+        ]
+
+        return ClaimCompareResponse(claims=claims)
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse claim comparison response: {e}")
+        raise HTTPException(status_code=500, detail="LLM returned invalid JSON")
+    except Exception as e:
+        logger.error(f"Claim comparison failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

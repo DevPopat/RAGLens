@@ -39,6 +39,36 @@ class RAGASMetricConfig:
     )
 
 
+def get_answer_metrics(has_ground_truth: bool) -> List:
+    """Get answer-level RAGAS metrics (LLM-as-judge on generated answers).
+
+    Args:
+        has_ground_truth: Whether expected answer is available
+
+    Returns:
+        List of RAGAS metric instances for answer evaluation
+    """
+    metrics = [ResponseRelevancy()]
+    if has_ground_truth:
+        metrics.append(FactualCorrectness())
+    return metrics
+
+
+def get_context_metrics(has_ground_truth: bool) -> List:
+    """Get context/retrieval RAGAS metrics.
+
+    Args:
+        has_ground_truth: Whether expected answer is available
+
+    Returns:
+        List of RAGAS metric instances for retrieval evaluation
+    """
+    metrics = [LLMContextPrecisionWithoutReference(), Faithfulness()]
+    if has_ground_truth:
+        metrics.append(LLMContextRecall())
+    return metrics
+
+
 def get_metrics_for_evaluation(has_ground_truth: bool) -> List:
     """Get appropriate RAGAS metrics based on data availability.
 

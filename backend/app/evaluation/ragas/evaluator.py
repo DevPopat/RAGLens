@@ -4,9 +4,13 @@ Provides a unified interface for evaluating RAG responses using RAGAS metrics.
 """
 import asyncio
 import logging
+import math
 from typing import Dict, Any, List, Optional
 
+import numpy as np
+
 from ragas import evaluate, EvaluationDataset
+from ragas.run_config import RunConfig
 
 from .llm_providers import get_ragas_llm, get_ragas_embeddings
 from .metrics import (
@@ -59,6 +63,13 @@ class RAGASEvaluator:
         self.llm = get_ragas_llm(provider, model)
         self.embeddings = get_ragas_embeddings()
         self.metric_config = metric_config or RAGASMetricConfig()
+        self.run_config = RunConfig(
+            max_workers=4,
+            max_retries=3,
+            max_wait=90,
+            timeout=300,
+            log_tenacity=True,
+        )
 
         logger.info(f"Initialized RAGASEvaluator with {provider}")
 
@@ -102,6 +113,7 @@ class RAGASEvaluator:
                 metrics=metrics,
                 llm=self.llm,
                 embeddings=self.embeddings,
+                run_config=self.run_config,
             )
 
             # Extract and normalize scores
@@ -135,6 +147,7 @@ class RAGASEvaluator:
     async def evaluate_batch(
         self,
         samples: List[Dict[str, Any]],
+        metrics: Optional[List] = None,
     ) -> List[Dict[str, Any]]:
         """Evaluate multiple samples in batch.
 
@@ -147,6 +160,8 @@ class RAGASEvaluator:
                 - response: str
                 - contexts: List[Dict]
                 - expected_answer: Optional[str]
+            metrics: Optional list of RAGAS metric instances. If not provided,
+                falls back to get_metrics_for_evaluation based on ground truth.
 
         Returns:
             List of evaluation results
@@ -164,7 +179,8 @@ class RAGASEvaluator:
 
         # Create RAGAS dataset
         dataset = create_ragas_dataset(samples)
-        metrics = get_metrics_for_evaluation(all_have_ground_truth)
+        if metrics is None:
+            metrics = get_metrics_for_evaluation(all_have_ground_truth)
 
         try:
             # Run RAGAS evaluation on full batch in a separate thread
@@ -175,7 +191,18 @@ class RAGASEvaluator:
                 metrics=metrics,
                 llm=self.llm,
                 embeddings=self.embeddings,
+                run_config=self.run_config,
             )
+
+            # Log raw RAGAS output for diagnostics
+            if hasattr(result, "to_pandas"):
+                df = result.to_pandas()
+                metric_cols = [c for c in df.columns if c not in ("user_input", "response", "retrieved_contexts", "reference")]
+                logger.info(
+                    "RAGAS batch raw scores (metrics=%s): %s",
+                    [m.__class__.__name__ for m in metrics],
+                    {col: df[col].tolist() for col in metric_cols},
+                )
 
             # Process results for each sample
             results = []
@@ -244,7 +271,7 @@ class RAGASEvaluator:
                         normalized = normalize_metric_name(col)
                         scores[normalized] = row[col]
 
-        return scores
+        return self._sanitize_scores(scores)
 
     def _extract_scores_for_index(self, result, index: int) -> Dict[str, float]:
         """Extract scores for a specific sample index from batch result.
@@ -267,4 +294,20 @@ class RAGASEvaluator:
                         normalized = normalize_metric_name(col)
                         scores[normalized] = row[col]
 
-        return scores
+        return self._sanitize_scores(scores)
+
+    @staticmethod
+    def _sanitize_scores(scores: Dict[str, float]) -> Dict[str, float]:
+        """Replace NaN/Inf values with None so scores are JSON-serializable."""
+        sanitized = {}
+        for k, v in scores.items():
+            try:
+                if v is None or (isinstance(v, (float, np.floating)) and (math.isnan(v) or math.isinf(v))):
+                    logger.warning(f"RAGAS metric '{k}' returned NaN/Inf — likely LLM response parsing failure")
+                    sanitized[k] = None
+                else:
+                    sanitized[k] = float(v) if isinstance(v, np.floating) else v
+            except (TypeError, ValueError):
+                logger.warning(f"RAGAS metric '{k}' returned non-numeric value: {v!r}")
+                sanitized[k] = None
+        return sanitized

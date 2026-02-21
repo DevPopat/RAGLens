@@ -9,9 +9,10 @@ interface ChatWindowProps {
   selectedMessageId: string | null;
   onSelectMessage: (id: string) => void;
   onRegenerate: (messageId: string) => void;
+  selectedSources: Set<number>;
 }
 
-export default function ChatWindow({ messages, isLoading, selectedMessageId, onSelectMessage, onRegenerate }: ChatWindowProps) {
+export default function ChatWindow({ messages, isLoading, selectedMessageId, onSelectMessage, onRegenerate, selectedSources }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function ChatWindow({ messages, isLoading, selectedMessageId, onS
             onSelect={message.role === 'assistant' ? () => onSelectMessage(message.id) : undefined}
             onRegenerate={message.role === 'assistant' ? () => onRegenerate(message.id) : undefined}
             isLoading={isLoading}
+            selectedSources={message.id === selectedMessageId ? selectedSources : undefined}
           />
         ))}
         {isLoading && (

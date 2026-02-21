@@ -547,12 +547,20 @@ async def _run_evaluation_task(
 ):
     """Background task to run golden set evaluation with RAGAS.
 
-    This is called asynchronously after the API returns.
+    Uses a two-pass approach:
+    1. Generate: Run RAG pipeline for each test case, collect responses
+    2. Evaluate: Two batched RAGAS calls (answer metrics + context metrics)
     """
     # Import here to avoid circular imports
     from app.db.database import AsyncSessionLocal
     from app.core.retrieval.retriever import RAGRetriever
     from app.evaluation.ragas import RAGASEvaluator
+    from app.evaluation.ragas.metrics import (
+        get_answer_metrics,
+        get_context_metrics,
+        compute_overall_score,
+        RAGASMetricConfig,
+    )
 
     async with AsyncSessionLocal() as db:
         try:
@@ -569,34 +577,86 @@ async def _run_evaluation_task(
             result = await db.execute(stmt)
             test_cases = result.scalars().all()
 
-            # Initialize RAG and RAGAS evaluator
+            # Initialize RAG pipeline and evaluator
             retriever = RAGRetriever()
             evaluator = RAGASEvaluator(provider=config.evaluator_provider)
 
-            results = []
-            completed = 0
+            # === Pass 1: Generate responses for all test cases ===
+            generated = []  # Successfully generated samples
+            results = []    # Final per-case results (including errors)
             failed = 0
-            total_score = 0
 
             for tc in test_cases:
                 try:
-                    # Run RAG pipeline
                     rag_result = await retriever.query(
                         query_text=tc.query,
                         top_k=config.top_k,
                         llm_provider=config.llm_provider
                     )
+                    generated.append({
+                        "test_case": tc,
+                        "rag_result": rag_result,
+                    })
+                except Exception as e:
+                    logger.error(f"RAG pipeline failed for test case {tc.id}: {e}")
+                    failed += 1
+                    results.append({
+                        "test_case_id": str(tc.id),
+                        "query": tc.query,
+                        "status": "error",
+                        "error": str(e),
+                        "sources": [],
+                    })
 
-                    # Evaluate response with RAGAS (with ground truth)
-                    evaluation = await evaluator.evaluate_response(
-                        query=tc.query,
-                        response=rag_result["response"],
-                        contexts=rag_result["sources"],
-                        expected_answer=tc.expected_answer
+            # === Pass 2: Batched RAGAS evaluation ===
+            if generated:
+                # Build samples list for batch evaluation
+                eval_samples = [
+                    {
+                        "query": g["test_case"].query,
+                        "response": g["rag_result"]["response"],
+                        "contexts": g["rag_result"]["sources"],
+                        "expected_answer": g["test_case"].expected_answer,
+                    }
+                    for g in generated
+                ]
+
+                has_ground_truth = all(
+                    s["expected_answer"] is not None for s in eval_samples
+                )
+
+                # Run two batched evaluations: answer metrics + context metrics
+                answer_results = await evaluator.evaluate_batch(
+                    eval_samples, metrics=get_answer_metrics(has_ground_truth)
+                )
+                context_results = await evaluator.evaluate_batch(
+                    eval_samples, metrics=get_context_metrics(has_ground_truth)
+                )
+
+                # Merge scores and build final results
+                metric_config = RAGASMetricConfig()
+                total_score = 0
+                completed = 0
+
+                for i, g in enumerate(generated):
+                    tc = g["test_case"]
+                    rag_result = g["rag_result"]
+
+                    # Merge scores from both batched evaluations
+                    answer_scores = answer_results[i].get("scores", {})
+                    context_scores = context_results[i].get("scores", {})
+                    merged_scores = {**context_scores, **answer_scores}
+
+                    # Remove partial overall_scores before recomputing
+                    merged_scores.pop("overall_score", None)
+
+                    has_gt = tc.expected_answer is not None
+                    overall = compute_overall_score(
+                        merged_scores, has_gt, metric_config
                     )
+                    merged_scores["overall_score"] = overall
 
-                    score = evaluation.get("overall_score", 0)
-                    total_score += score if score else 0
+                    total_score += overall if overall else 0
                     completed += 1
 
                     results.append({
@@ -604,21 +664,23 @@ async def _run_evaluation_task(
                         "query": tc.query,
                         "expected_answer": tc.expected_answer,
                         "generated_answer": rag_result["response"],
-                        "overall_score": score,
-                        "scores": evaluation.get("scores", {}),
+                        "overall_score": overall,
+                        "scores": merged_scores,
                         "status": "success",
-                        "has_ground_truth": evaluation.get("has_ground_truth", True)
+                        "has_ground_truth": has_gt,
+                        "sources": [
+                            {
+                                "id": s["id"],
+                                "text": s["text"],
+                                "score": s["score"],
+                                "metadata": s["metadata"],
+                            }
+                            for s in rag_result["sources"]
+                        ],
                     })
-
-                except Exception as e:
-                    logger.error(f"Failed to evaluate test case {tc.id}: {e}")
-                    failed += 1
-                    results.append({
-                        "test_case_id": str(tc.id),
-                        "query": tc.query,
-                        "status": "error",
-                        "error": str(e)
-                    })
+            else:
+                completed = 0
+                total_score = 0
 
             # Calculate summary
             avg_score = total_score / completed if completed > 0 else None
@@ -628,7 +690,7 @@ async def _run_evaluation_task(
                 "failed": failed,
                 "avg_score": round(avg_score, 2) if avg_score else None,
                 "pass_rate": round(completed / len(test_cases), 3) if test_cases else 0,
-                "evaluation_type": "ragas"
+                "evaluation_type": "ragas",
             }
 
             # Update run record
@@ -636,7 +698,7 @@ async def _run_evaluation_task(
             run.completed_at = datetime.utcnow()
             run.results_json = {
                 "results": results,
-                "summary": summary
+                "summary": summary,
             }
 
             await db.commit()

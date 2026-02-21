@@ -26,6 +26,7 @@ export interface EvaluationResult {
     metrics_used?: string[];
   };
   timestamp: string;
+  latency_ms?: number;
 }
 
 export interface Source {
@@ -93,6 +94,7 @@ export interface EvaluationResponse {
     metrics_used?: string[];
   };
   timestamp: string;
+  latency_ms?: number;
 }
 
 export interface EvaluationListResponse {
@@ -206,6 +208,7 @@ export interface TestCaseResult {
   scores: EvaluationScores;
   status: 'success' | 'error';
   has_ground_truth: boolean;
+  sources?: Source[];
 }
 
 export interface RunSummary {
@@ -245,6 +248,18 @@ export interface BulkImportResponse {
   imported_count: number;
   skipped_count: number;
   errors: string[];
+}
+
+// Claim Comparison Types
+export interface Claim {
+  claim: string;
+  status: 'covered' | 'missing' | 'contradicted';
+  detail: string;
+  generated_quote: string | null;
+}
+
+export interface ClaimCompareResponse {
+  claims: Claim[];
 }
 
 // Diagnosis Types

@@ -1,5 +1,6 @@
 import { User, Bot, RefreshCw } from 'lucide-react';
 import type { ChatMessage } from '../../types';
+import SourceHighlightedText from '../common/SourceHighlightedText';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -7,11 +8,13 @@ interface MessageBubbleProps {
   onSelect?: () => void;
   onRegenerate?: () => void;
   isLoading?: boolean;
+  selectedSources?: Set<number>;
 }
 
-export default function MessageBubble({ message, isSelected = false, onSelect, onRegenerate, isLoading = false }: MessageBubbleProps) {
+export default function MessageBubble({ message, isSelected = false, onSelect, onRegenerate, isLoading = false, selectedSources }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isClickable = !!onSelect;
+  const showHighlights = !isUser && selectedSources && selectedSources.size > 0 && message.sources && message.sources.length > 0;
 
   return (
     <div
@@ -41,7 +44,17 @@ export default function MessageBubble({ message, isSelected = false, onSelect, o
             isSelected ? 'ring-2 ring-primary-500' : ''
           }`}
         >
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+            {showHighlights ? (
+              <SourceHighlightedText
+                text={message.content}
+                sources={message.sources!}
+                selectedIndices={selectedSources}
+              />
+            ) : (
+              message.content
+            )}
+          </p>
         </div>
         {onRegenerate && (
           <button

@@ -42,6 +42,7 @@ class EvaluationResponse(BaseModel):
     evaluator: str = Field(..., description="Evaluator identifier (e.g., anthropic/claude-3-5-sonnet)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional evaluation metadata")
     timestamp: datetime
+    latency_ms: Optional[float] = Field(None, description="Evaluation latency in milliseconds")
 
     class Config:
         from_attributes = True
@@ -74,3 +75,28 @@ class EvaluationListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class ClaimCompareRequest(BaseModel):
+    """Request to compare expected vs generated answers at claim level."""
+
+    expected_answer: str = Field(..., description="Ground truth / expected answer")
+    generated_answer: str = Field(..., description="LLM-generated answer")
+
+
+class Claim(BaseModel):
+    """A single factual claim extracted from the expected answer."""
+
+    claim: str = Field(..., description="The factual claim")
+    status: str = Field(..., description="covered, missing, or contradicted")
+    detail: str = Field(..., description="Explanation of the status")
+    generated_quote: Optional[str] = Field(
+        None,
+        description="The relevant quote from the generated answer, if any"
+    )
+
+
+class ClaimCompareResponse(BaseModel):
+    """Claim-level comparison between expected and generated answers."""
+
+    claims: List[Claim]

@@ -5,6 +5,7 @@ import type {
   EvaluationListResponse,
   BatchEvaluationRequest,
   BatchEvaluationResponse,
+  ClaimCompareResponse,
 } from '../types';
 
 export async function runEvaluation(request: EvaluationRequest): Promise<EvaluationResponse> {
@@ -35,5 +36,16 @@ export async function listEvaluations(
 
 export async function getEvaluationsForQuery(queryId: string): Promise<EvaluationListResponse> {
   const response = await client.get<EvaluationListResponse>(`/evaluation/query/${queryId}`);
+  return response.data;
+}
+
+export async function compareClaims(
+  expectedAnswer: string,
+  generatedAnswer: string
+): Promise<ClaimCompareResponse> {
+  const response = await client.post<ClaimCompareResponse>('/evaluation/compare-claims', {
+    expected_answer: expectedAnswer,
+    generated_answer: generatedAnswer,
+  });
   return response.data;
 }

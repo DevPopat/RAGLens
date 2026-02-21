@@ -448,6 +448,14 @@ export default function GoldenSetDetailPage() {
                   <p className="text-sm text-gray-500">
                     {new Date(run.started_at).toLocaleString()}
                   </p>
+                  <div className="flex gap-2 mt-1">
+                    <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                      {run.config_snapshot?.llm_provider}
+                    </span>
+                    <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                      eval: {run.config_snapshot?.evaluator_provider}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={run.status} />

@@ -32,6 +32,8 @@ function migrateMessages(raw: unknown[]): ChatMessage[] {
           ...(msg.latency_ms != null ? { latency_ms: msg.latency_ms } : {}),
           ...(msg.token_usage != null ? { token_usage: msg.token_usage } : {}),
           ...(msg.cost != null ? { cost: msg.cost } : {}),
+          ...(msg.query_id != null ? { query_id: msg.query_id } : {}),
+          ...(msg.evaluation != null ? { evaluation: msg.evaluation } : {}),
         }
       : {}),
   }));
@@ -205,6 +207,7 @@ export default function useChat(): UseChatReturn {
         evaluator: response.evaluator,
         metadata: response.metadata,
         timestamp: response.timestamp,
+        latency_ms: response.latency_ms,
       };
 
       // Attach result to the message and persist
