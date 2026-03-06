@@ -1,7 +1,13 @@
 import { useState } from 'react';
-import { Info } from 'lucide-react';
-import type { EvaluationScores } from '../../types';
+import { Info, Search, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import type { EvaluationScores, DetailedAnalysisResponse } from '../../types';
 import Modal from '../common/Modal';
+import { getDetailedAnalysis } from '../../api/evaluation';
+import {
+  FaithfulnessBreakdown,
+  QuestionCoverageBreakdown,
+  ContextUtilizationBreakdown,
+} from './DetailedAnalysis';
 
 interface MetricDetail {
   key: string;
@@ -51,12 +57,11 @@ const METRIC_DETAILS: MetricDetail[] = [
     key: 'answer_relevancy',
     label: 'Answer Relevancy',
     description:
-      'Measures whether the generated answer directly addresses the original question. A high score means the response is focused and pertinent to what was asked.',
+      'Pass/fail metric: an LLM judge directly evaluates whether the response answers the user\'s question. 1 = relevant, 0 = not relevant. For batch runs, the score is the fraction of cases that passed.',
     getInterpretation: (score: number) => {
-      if (score >= 0.8) return 'The answer directly and thoroughly addresses the question asked.';
-      if (score >= 0.6) return 'The answer is relevant but may include tangential information or miss some aspects of the question.';
-      if (score >= 0.4) return 'The answer partially addresses the question but drifts off-topic in places.';
-      return 'The answer does not adequately address the question that was asked.';
+      return score === 1
+        ? 'The response directly and completely answers the user\'s question.'
+        : 'The response does not adequately address the question that was asked.';
     },
   },
   {
@@ -87,16 +92,54 @@ function getScoreBg(score: number): string {
   return 'bg-red-50 border-red-200';
 }
 
+export interface AnalysisData {
+  query: string;
+  response: string;
+  contexts: string[];
+  message_type?: string;
+}
+
 interface ScoreDetailModalProps {
   scores: EvaluationScores;
   isOpen: boolean;
   onClose: () => void;
+  analysisData?: AnalysisData;
 }
 
-export default function ScoreDetailModal({ scores, isOpen, onClose }: ScoreDetailModalProps) {
+export default function ScoreDetailModal({ scores, isOpen, onClose, analysisData }: ScoreDetailModalProps) {
+  const [analysis, setAnalysis] = useState<DetailedAnalysisResponse | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   const availableMetrics = METRIC_DETAILS.filter(
     (m) => scores[m.key] !== undefined && scores[m.key] !== null
   );
+
+  const handleLoadAnalysis = async () => {
+    if (!analysisData) return;
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    try {
+      const result = await getDetailedAnalysis({
+        query: analysisData.query,
+        response: analysisData.response,
+        contexts: analysisData.contexts,
+        scores: Object.fromEntries(
+          Object.entries(scores).filter(
+            ([k, v]) => v != null && k !== 'overall_score'
+          )
+        ) as Record<string, number>,
+        message_type: analysisData.message_type,
+      });
+      setAnalysis(result);
+    } catch (err) {
+      setAnalysisError(
+        err instanceof Error ? err.message : 'Failed to load detailed analysis'
+      );
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Score Details" size="lg">
@@ -124,6 +167,14 @@ export default function ScoreDetailModal({ scores, isOpen, onClose }: ScoreDetai
           const raw = scores[metric.key] as number;
           const pct = Math.round(raw * 100);
 
+          // Get the detailed breakdown for this metric (if loaded)
+          const metricAnalysis = analysis
+            ? metric.key === 'faithfulness' ? analysis.faithfulness
+            : metric.key === 'answer_relevancy' ? analysis.answer_relevancy
+            : metric.key === 'context_precision' ? analysis.context_precision
+            : null
+            : null;
+
           return (
             <div key={metric.key} className="rounded-lg border border-gray-200 p-4">
               <div className="flex items-start justify-between mb-2">
@@ -132,13 +183,44 @@ export default function ScoreDetailModal({ scores, isOpen, onClose }: ScoreDetai
                   <p className="text-xs text-gray-500 mt-1">{metric.description}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className={`text-xl font-bold ${getScoreColor(raw)}`}>{pct}%</p>
-                  <p className="text-xs text-gray-500">raw: {raw.toFixed(4)}</p>
+                  {metric.key === 'answer_relevancy' ? (
+                    raw === 1 ? (
+                      <span className="inline-flex items-center gap-1 text-green-600 font-semibold text-sm">
+                        <CheckCircle className="w-4 h-4" /> Relevant
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-sm">
+                        <XCircle className="w-4 h-4" /> Not Relevant
+                      </span>
+                    )
+                  ) : (
+                    <>
+                      <p className={`text-xl font-bold ${getScoreColor(raw)}`}>{pct}%</p>
+                      <p className="text-xs text-gray-500">raw: {raw.toFixed(4)}</p>
+                    </>
+                  )}
                 </div>
               </div>
+
+              {/* Show LLM summary if analysis loaded, otherwise show generic interpretation */}
               <div className="mt-3 bg-gray-50 rounded-md p-3">
-                <p className="text-sm text-gray-700">{metric.getInterpretation(raw)}</p>
+                <p className="text-sm text-gray-700">
+                  {metricAnalysis && 'summary' in metricAnalysis
+                    ? metricAnalysis.summary
+                    : metric.getInterpretation(raw)}
+                </p>
               </div>
+
+              {/* Detailed breakdown sections */}
+              {analysis && metric.key === 'faithfulness' && analysis.faithfulness && (
+                <FaithfulnessBreakdown detail={analysis.faithfulness} />
+              )}
+              {analysis && metric.key === 'answer_relevancy' && analysis.answer_relevancy && (
+                <QuestionCoverageBreakdown detail={analysis.answer_relevancy} />
+              )}
+              {analysis && metric.key === 'context_precision' && analysis.context_precision && (
+                <ContextUtilizationBreakdown detail={analysis.context_precision} />
+              )}
             </div>
           );
         })}
@@ -148,6 +230,32 @@ export default function ScoreDetailModal({ scores, isOpen, onClose }: ScoreDetai
             No individual metric scores available for this evaluation.
           </p>
         )}
+
+        {/* Load Detailed Analysis button */}
+        {analysisData && !analysis && (
+          <div className="flex justify-center">
+            <button
+              onClick={handleLoadAnalysis}
+              disabled={analysisLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 border border-primary-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {analysisLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  Load Detailed Analysis
+                </>
+              )}
+            </button>
+          </div>
+        )}
+        {analysisError && (
+          <p className="text-sm text-red-500 text-center">{analysisError}</p>
+        )}
       </div>
     </Modal>
   );
@@ -156,9 +264,10 @@ export default function ScoreDetailModal({ scores, isOpen, onClose }: ScoreDetai
 interface ScoreDetailButtonProps {
   scores: EvaluationScores;
   size?: 'sm' | 'md';
+  analysisData?: AnalysisData;
 }
 
-export function ScoreDetailButton({ scores, size = 'sm' }: ScoreDetailButtonProps) {
+export function ScoreDetailButton({ scores, size = 'sm', analysisData }: ScoreDetailButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const sizeClasses = {
@@ -178,7 +287,12 @@ export function ScoreDetailButton({ scores, size = 'sm' }: ScoreDetailButtonProp
         <Info className={size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
         More Details
       </button>
-      <ScoreDetailModal scores={scores} isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <ScoreDetailModal
+        scores={scores}
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        analysisData={analysisData}
+      />
     </>
   );
 }

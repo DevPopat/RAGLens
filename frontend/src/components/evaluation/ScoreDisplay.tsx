@@ -1,3 +1,4 @@
+import { CheckCircle, XCircle } from 'lucide-react';
 import type { EvaluationScores } from '../../types';
 import ScoreBar, { ScoreCircle } from '../common/ScoreBar';
 
@@ -86,7 +87,7 @@ export function ScoreBreakdown({ scores }: ScoreBreakdownProps) {
     {
       key: 'answer_relevancy',
       label: 'Answer Relevancy',
-      description: 'Does the answer address the question?',
+      description: 'Pass/fail: LLM judge evaluates whether the response answers the question.',
     },
   ];
 
@@ -96,6 +97,8 @@ export function ScoreBreakdown({ scores }: ScoreBreakdownProps) {
         const score = scores[metric.key as keyof EvaluationScores];
         if (score === undefined) return null;
 
+        const isPassFail = metric.key === 'answer_relevancy';
+
         return (
           <div key={metric.key} className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
@@ -103,11 +106,23 @@ export function ScoreBreakdown({ scores }: ScoreBreakdownProps) {
                 <h4 className="font-medium text-gray-900">{metric.label}</h4>
                 <p className="text-xs text-gray-500">{metric.description}</p>
               </div>
-              <span className="text-lg font-bold text-gray-900">
-                {Math.round(score * 100)}%
-              </span>
+              {isPassFail ? (
+                score === 1 ? (
+                  <span className="inline-flex items-center gap-1 text-green-600 font-semibold text-sm">
+                    <CheckCircle className="w-4 h-4" /> Relevant
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-sm">
+                    <XCircle className="w-4 h-4" /> Not Relevant
+                  </span>
+                )
+              ) : (
+                <span className="text-lg font-bold text-gray-900">
+                  {Math.round(score * 100)}%
+                </span>
+              )}
             </div>
-            <ScoreBar score={score} showPercentage={false} size="md" />
+            {!isPassFail && <ScoreBar score={score} showPercentage={false} size="md" />}
           </div>
         );
       })}

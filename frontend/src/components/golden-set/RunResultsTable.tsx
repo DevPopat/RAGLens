@@ -141,7 +141,7 @@ export default function RunResultsTable({ run }: RunResultsTableProps) {
 const METRIC_EXPLANATIONS: Record<string, string> = {
   context_precision: 'Are the retrieved documents relevant to the query?',
   faithfulness: 'Is the response grounded in the retrieved context, without hallucination?',
-  answer_relevancy: 'Does the response actually address what was asked?',
+  answer_relevancy: 'Pass/fail: LLM judge evaluates whether the response answers the question. Score = fraction of cases that passed across the run.',
   answer_correctness: 'Does the generated answer match the expected answer?',
   context_recall: 'Does the retrieved context cover what\'s needed to answer?',
 };
@@ -484,11 +484,16 @@ function ResultRow({ result, index, isExpanded, onToggle }: ResultRowProps) {
                   )}
                   {result.scores.answer_relevancy != null && (
                     <div>
-                      <ScoreBar
-                        score={result.scores.answer_relevancy}
-                        label="Answer Relevancy"
-                        size="sm"
-                      />
+                      <p className="text-xs font-medium text-gray-600 mb-1">Answer Relevancy</p>
+                      {result.scores.answer_relevancy === 1 ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 font-semibold text-sm">
+                          <CheckCircle className="w-4 h-4" /> Relevant
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-sm">
+                          <XCircle className="w-4 h-4" /> Not Relevant
+                        </span>
+                      )}
                       <p className="text-xs text-gray-400 mt-1">{METRIC_EXPLANATIONS.answer_relevancy}</p>
                     </div>
                   )}

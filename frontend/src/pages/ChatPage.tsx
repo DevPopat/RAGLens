@@ -28,6 +28,14 @@ export default function ChatPage() {
   const selectedMessage = messages.find((m) => m.id === selectedMessageId);
   const displayedSources = selectedMessage?.sources ?? [];
 
+  // Find the user message that preceded the selected assistant message
+  const precedingUserMessage = selectedMessage
+    ? messages
+        .slice(0, messages.indexOf(selectedMessage))
+        .reverse()
+        .find((m) => m.role === 'user')
+    : undefined;
+
   const toggleSource = useCallback((idx: number) => {
     setSelectedSources((prev) => {
       const next = new Set(prev);
@@ -147,6 +155,9 @@ export default function ChatPage() {
           selectedSources={selectedSources}
           onToggleSource={toggleSource}
           onToggleAllSources={toggleAllSources}
+          query={precedingUserMessage?.content}
+          responseText={selectedMessage?.content}
+          messageType={selectedMessage?.message_type}
         />
       </div>
     </div>

@@ -23,11 +23,26 @@ from app.api.schemas.evaluation import (
     ClaimCompareRequest,
     ClaimCompareResponse,
     Claim,
+    DetailedAnalysisRequest,
+    DetailedAnalysisResponse,
+    FaithfulnessDetail,
+    QuestionCoverageDetail,
+    ContextUtilizationDetail,
 )
 import json
 from app.evaluation.ragas import RAGASEvaluator
 from app.core.generation.claude import ClaudeGenerator
 from app.core.generation.openai_gen import OpenAIGenerator
+from app.core.generation.prompt_templates import (
+    CLAIM_COMPARE_PROMPT,
+    CLAIM_COMPARE_SYSTEM_PROMPT,
+    DETAILED_ANALYSIS_SYSTEM_PROMPT,
+    DETAILED_ANALYSIS_PROMPT_HEADER,
+    DETAILED_ANALYSIS_PROMPT_COVERAGE,
+    DETAILED_ANALYSIS_PROMPT_CONTEXT,
+    DETAILED_ANALYSIS_FORMAT_WITH_COVERAGE,
+    DETAILED_ANALYSIS_FORMAT_WITHOUT_COVERAGE,
+)
 from app.api.routes.chat import _format_history_for_evaluation
 from app.config import settings
 
@@ -327,27 +342,6 @@ async def get_evaluations_for_query(
     )
 
 
-CLAIM_COMPARE_PROMPT = """You are comparing an expected answer against a generated answer.
-
-Extract every distinct factual claim from the expected answer. For each claim, determine whether the generated answer:
-- "covered": conveys the same information (even if worded differently)
-- "missing": does not mention this information at all
-- "contradicted": states something that conflicts with the claim
-
-For claims that are "covered" or "contradicted", include the exact quote from the generated answer that corresponds to the claim. The quote must be a verbatim substring of the generated answer.
-
-Expected answer:
-{expected_answer}
-
-Generated answer:
-{generated_answer}
-
-Respond with ONLY valid JSON — no markdown fences, no extra text:
-{{"claims": [
-  {{"claim": "...", "status": "covered|missing|contradicted", "detail": "brief explanation", "generated_quote": "exact substring from generated answer or null"}}
-]}}"""
-
-
 @router.post("/compare-claims", response_model=ClaimCompareResponse)
 async def compare_claims(request: ClaimCompareRequest):
     """Compare expected vs generated answers at the claim level.
@@ -368,7 +362,7 @@ async def compare_claims(request: ClaimCompareRequest):
 
         result = await generator.generate(
             prompt=prompt,
-            system_prompt="You are a precise factual comparison assistant. Respond only with valid JSON.",
+            system_prompt=CLAIM_COMPARE_SYSTEM_PROMPT,
             temperature=0.0,
         )
 
@@ -390,4 +384,117 @@ async def compare_claims(request: ClaimCompareRequest):
         raise HTTPException(status_code=500, detail="LLM returned invalid JSON")
     except Exception as e:
         logger.error(f"Claim comparison failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Message types that skip question coverage analysis
+_SKIP_COVERAGE_TYPES = {"acknowledgment", "greeting", "closure"}
+
+
+@router.post("/detailed-analysis", response_model=DetailedAnalysisResponse)
+async def get_detailed_analysis(request: DetailedAnalysisRequest):
+    """Get detailed, actionable analysis of a RAG evaluation.
+
+    Lazy-loaded on-demand when the user wants to understand WHY a
+    particular evaluation scored the way it did. Makes a single LLM call
+    to analyze faithfulness (claim-level), question coverage, and context
+    utilization.
+    """
+    try:
+        # Format scores for the prompt
+        scores_summary = ", ".join(
+            f"{k}: {v:.0%}" for k, v in request.scores.items()
+            if v is not None and k != "overall_score"
+        )
+
+        # Format contexts with indices
+        contexts_formatted = "\n".join(
+            f"[Context {i}]: {ctx}" for i, ctx in enumerate(request.contexts)
+        )
+
+        # Determine whether to include question coverage
+        skip_coverage = (
+            request.message_type in _SKIP_COVERAGE_TYPES
+            if request.message_type
+            else False
+        )
+
+        # Build prompt dynamically
+        prompt_parts = [
+            DETAILED_ANALYSIS_PROMPT_HEADER.format(
+                query=request.query,
+                response=request.response,
+                contexts_formatted=contexts_formatted,
+                scores_summary=scores_summary or "No scores available",
+            )
+        ]
+
+        if not skip_coverage:
+            prompt_parts.append(DETAILED_ANALYSIS_PROMPT_COVERAGE)
+            section_num = 3
+        else:
+            section_num = 2
+
+        prompt_parts.append(
+            DETAILED_ANALYSIS_PROMPT_CONTEXT.format(section_num=section_num)
+        )
+
+        if skip_coverage:
+            prompt_parts.append(DETAILED_ANALYSIS_FORMAT_WITHOUT_COVERAGE)
+        else:
+            prompt_parts.append(DETAILED_ANALYSIS_FORMAT_WITH_COVERAGE)
+
+        prompt = "".join(prompt_parts)
+
+        # Use the configured LLM provider
+        if settings.default_llm_provider == "openai":
+            generator = OpenAIGenerator()
+        else:
+            generator = ClaudeGenerator()
+
+        result = await generator.generate(
+            prompt=prompt,
+            system_prompt=DETAILED_ANALYSIS_SYSTEM_PROMPT,
+            temperature=0.0,
+            max_tokens=4096,
+        )
+
+        parsed = json.loads(result["text"])
+
+        # Build response, handling each section gracefully
+        faithfulness = None
+        if "faithfulness" in parsed:
+            try:
+                faithfulness = FaithfulnessDetail(**parsed["faithfulness"])
+            except Exception as e:
+                logger.warning(f"Failed to parse faithfulness detail: {e}")
+
+        answer_relevancy = None
+        if not skip_coverage and "answer_relevancy" in parsed:
+            try:
+                answer_relevancy = QuestionCoverageDetail(**parsed["answer_relevancy"])
+            except Exception as e:
+                logger.warning(f"Failed to parse answer_relevancy detail: {e}")
+
+        context_precision = None
+        if "context_precision" in parsed:
+            try:
+                context_precision = ContextUtilizationDetail(**parsed["context_precision"])
+            except Exception as e:
+                logger.warning(f"Failed to parse context_precision detail: {e}")
+
+        return DetailedAnalysisResponse(
+            faithfulness=faithfulness,
+            answer_relevancy=answer_relevancy,
+            context_precision=context_precision,
+        )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse detailed analysis response: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="LLM returned invalid JSON for detailed analysis"
+        )
+    except Exception as e:
+        logger.error(f"Detailed analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -306,7 +306,7 @@ class RAGASEvaluator:
                     logger.warning(f"RAGAS metric '{k}' returned NaN/Inf — likely LLM response parsing failure")
                     sanitized[k] = None
                 else:
-                    sanitized[k] = float(v) if isinstance(v, np.floating) else v
+                    sanitized[k] = float(v) if isinstance(v, (np.floating, np.integer)) else v
             except (TypeError, ValueError):
                 logger.warning(f"RAGAS metric '{k}' returned non-numeric value: {v!r}")
                 sanitized[k] = None

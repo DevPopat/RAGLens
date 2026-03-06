@@ -6,7 +6,7 @@ from ragas.metrics import (
     LLMContextPrecisionWithoutReference,
     LLMContextRecall,
     Faithfulness,
-    ResponseRelevancy,
+    AspectCritic,
     FactualCorrectness,
 )
 
@@ -30,11 +30,12 @@ class RAGASMetricConfig:
     )
 
     # Metric weights when no ground_truth available (inline evaluation)
+    # answer_relevancy uses AspectCritic (binary 0/1), so weighted lower than continuous metrics
     weights_without_ground_truth: Dict[str, float] = field(
         default_factory=lambda: {
-            "context_precision": 0.25,
-            "faithfulness": 0.40,
-            "answer_relevancy": 0.35,
+            "context_precision": 0.30,
+            "faithfulness": 0.45,
+            "answer_relevancy": 0.25,
         }
     )
 
@@ -48,7 +49,7 @@ def get_answer_metrics(has_ground_truth: bool) -> List:
     Returns:
         List of RAGAS metric instances for answer evaluation
     """
-    metrics = [ResponseRelevancy()]
+    metrics = [AspectCritic(name="answer_relevancy", definition="Does the response directly and completely answer the user's question?")]
     if has_ground_truth:
         metrics.append(FactualCorrectness())
     return metrics
@@ -82,7 +83,7 @@ def get_metrics_for_evaluation(has_ground_truth: bool) -> List:
     base_metrics = [
         LLMContextPrecisionWithoutReference(),
         Faithfulness(),
-        ResponseRelevancy(),
+        AspectCritic(name="answer_relevancy", definition="Does the response directly and completely answer the user's question?"),
     ]
 
     if has_ground_truth:
@@ -143,6 +144,7 @@ METRIC_NAME_MAP = {
     "faithfulness": "faithfulness",
     "response_relevancy": "answer_relevancy",
     "answer_relevancy": "answer_relevancy",
+    "aspect_critic": "answer_relevancy",
     "factual_correctness": "answer_correctness",
     "answer_correctness": "answer_correctness",
 }

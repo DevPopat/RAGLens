@@ -14,6 +14,7 @@ export interface ChatMessage {
   cost?: number;
   query_id?: string;
   evaluation?: EvaluationResult;
+  message_type?: 'question' | 'follow_up' | 'acknowledgment' | 'closure' | 'greeting';
 }
 
 export interface EvaluationResult {
@@ -260,6 +261,59 @@ export interface Claim {
 
 export interface ClaimCompareResponse {
   claims: Claim[];
+}
+
+// Detailed Analysis Types
+
+export interface FaithfulnessClaim {
+  statement: string;
+  verdict: 'supported' | 'unsupported' | 'contradicted';
+  reason: string;
+  source_quote: string | null;
+  context_index: number | null;
+}
+
+export interface FaithfulnessDetail {
+  summary: string;
+  claims: FaithfulnessClaim[];
+}
+
+export interface QuestionComponent {
+  component: string;
+  verdict: 'addressed' | 'partially_addressed' | 'not_addressed';
+  response_quote: string | null;
+  reason: string;
+}
+
+export interface QuestionCoverageDetail {
+  summary: string;
+  components: QuestionComponent[];
+}
+
+export interface ContextUtilization {
+  context_index: number;
+  verdict: 'used' | 'partially_used' | 'not_used';
+  used_in_response: string | null;
+  reason: string;
+}
+
+export interface ContextUtilizationDetail {
+  summary: string;
+  contexts: ContextUtilization[];
+}
+
+export interface DetailedAnalysisRequest {
+  query: string;
+  response: string;
+  contexts: string[];
+  scores: Record<string, number>;
+  message_type?: string;
+}
+
+export interface DetailedAnalysisResponse {
+  faithfulness: FaithfulnessDetail | null;
+  answer_relevancy: QuestionCoverageDetail | null;
+  context_precision: ContextUtilizationDetail | null;
 }
 
 // Diagnosis Types

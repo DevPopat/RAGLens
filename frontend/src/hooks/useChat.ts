@@ -34,6 +34,7 @@ function migrateMessages(raw: unknown[]): ChatMessage[] {
           ...(msg.cost != null ? { cost: msg.cost } : {}),
           ...(msg.query_id != null ? { query_id: msg.query_id } : {}),
           ...(msg.evaluation != null ? { evaluation: msg.evaluation } : {}),
+          ...(msg.message_type != null ? { message_type: msg.message_type } : {}),
         }
       : {}),
   }));
@@ -106,6 +107,7 @@ export default function useChat(): UseChatReturn {
           token_usage: response.token_usage,
           cost: response.cost,
           query_id: response.query_id,
+          message_type: response.message_type,
         };
         persistMessages([...updatedMessages, assistantMessage]);
       } catch (err) {
@@ -156,6 +158,7 @@ export default function useChat(): UseChatReturn {
           token_usage: response.token_usage,
           cost: response.cost,
           query_id: response.query_id,
+          message_type: response.message_type,
           evaluation: undefined,
         };
         persistMessages(updated);

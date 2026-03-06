@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, ChevronRight, ChevronDown, ChevronUp, Activity, RefreshCw, Clock } from 'lucide-react';
+import { FileText, ChevronRight, ChevronDown, ChevronUp, Activity, RefreshCw, Clock, CheckCircle, XCircle } from 'lucide-react';
 import type { Source, EvaluationResult } from '../../types';
 import ScoreBar from '../common/ScoreBar';
 import Button from '../common/Button';
@@ -15,6 +15,9 @@ interface SourcesPanelProps {
   selectedSources: Set<number>;
   onToggleSource: (idx: number) => void;
   onToggleAllSources: () => void;
+  query?: string;
+  responseText?: string;
+  messageType?: string;
 }
 
 export default function SourcesPanel({
@@ -27,6 +30,9 @@ export default function SourcesPanel({
   selectedSources,
   onToggleSource,
   onToggleAllSources,
+  query,
+  responseText,
+  messageType,
 }: SourcesPanelProps) {
   if (sources.length === 0) {
     return null;
@@ -109,14 +115,34 @@ export default function SourcesPanel({
                     />
                   )}
                   {evaluation.scores.answer_relevancy != null && (
-                    <ScoreBar
-                      score={evaluation.scores.answer_relevancy}
-                      label="Answer Relevancy"
-                      size="sm"
-                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Answer Relevancy</span>
+                      {evaluation.scores.answer_relevancy === 1 ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 font-semibold text-xs">
+                          <CheckCircle className="w-3.5 h-3.5" /> Relevant
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-red-600 font-semibold text-xs">
+                          <XCircle className="w-3.5 h-3.5" /> Not Relevant
+                        </span>
+                      )}
+                    </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <ScoreDetailButton scores={evaluation.scores} size="sm" />
+                    <ScoreDetailButton
+                      scores={evaluation.scores}
+                      size="sm"
+                      analysisData={
+                        query && responseText && sources.length > 0
+                          ? {
+                              query,
+                              response: responseText,
+                              contexts: sources.map((s) => s.text),
+                              message_type: messageType,
+                            }
+                          : undefined
+                      }
+                    />
                     {evaluation.latency_ms != null && (
                       <span className="flex items-center gap-1 text-xs text-gray-400">
                         <Clock className="w-3 h-3" />

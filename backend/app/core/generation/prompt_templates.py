@@ -286,6 +286,131 @@ Provide evaluation in JSON format:
     return prompt
 
 
+# --- Claim Comparison Prompt (used by /evaluation/compare-claims) ---
+
+CLAIM_COMPARE_PROMPT = """You are comparing an expected answer against a generated answer.
+
+Extract every distinct factual claim from the expected answer. For each claim, determine whether the generated answer:
+- "covered": conveys the same information (even if worded differently)
+- "missing": does not mention this information at all
+- "contradicted": states something that conflicts with the claim
+
+For claims that are "covered" or "contradicted", include the exact quote from the generated answer that corresponds to the claim. The quote must be a verbatim substring of the generated answer.
+
+Expected answer:
+{expected_answer}
+
+Generated answer:
+{generated_answer}
+
+Respond with ONLY valid JSON — no markdown fences, no extra text:
+{{"claims": [
+  {{"claim": "...", "status": "covered|missing|contradicted", "detail": "brief explanation", "generated_quote": "exact substring from generated answer or null"}}
+]}}"""
+
+CLAIM_COMPARE_SYSTEM_PROMPT = "You are a precise factual comparison assistant. Respond only with valid JSON."
+
+
+# --- Detailed Analysis Prompts (used by /evaluation/detailed-analysis) ---
+
+DETAILED_ANALYSIS_SYSTEM_PROMPT = (
+    "You are a precise RAG evaluation analyst. Respond only with valid JSON. "
+    "Be specific and cite exact text from the inputs."
+)
+
+DETAILED_ANALYSIS_PROMPT_HEADER = """You are analyzing a RAG (Retrieval-Augmented Generation) system's response. Given the user's question, the generated response, and the retrieved contexts, provide a detailed breakdown.
+
+The RAGAS framework scored this response: {scores_summary}
+
+## INPUT
+
+**User Question:**
+{query}
+
+**Generated Response:**
+{response}
+
+**Retrieved Contexts:**
+{contexts_formatted}
+
+## YOUR TASK
+
+Analyze the response across the dimensions below. Be specific and cite exact text.
+
+### 1. Faithfulness Analysis
+Extract every distinct factual claim from the generated response. For each claim, determine whether it is:
+- "supported": directly backed by information in the retrieved contexts
+- "unsupported": not found in any retrieved context (hallucinated or assumed)
+- "contradicted": directly conflicts with information in the contexts
+
+For supported/contradicted claims, include the relevant quote from the context and which context (by 0-based index) it comes from. For unsupported claims, set source_quote and context_index to null.
+"""
+
+DETAILED_ANALYSIS_PROMPT_COVERAGE = """
+### 2. Question Coverage Analysis
+Break the user's question into its component sub-questions or intent parts. For each component, determine:
+- "addressed": the response directly answers this component
+- "partially_addressed": the response touches on this but incompletely
+- "not_addressed": the response does not address this at all
+
+For addressed/partially_addressed components, include the exact substring from the response that addresses it. For not_addressed, set response_quote to null.
+"""
+
+DETAILED_ANALYSIS_PROMPT_CONTEXT = """
+### {section_num}. Context Utilization Analysis
+For each retrieved context (by 0-based index), determine whether the response actually drew information from it:
+- "used": the response clearly incorporates information from this context
+- "partially_used": the response tangentially draws from this context
+- "not_used": the response does not use this context at all
+
+For used/partially_used contexts, include the exact substring from the response that reflects information from this context. For not_used, set used_in_response to null.
+"""
+
+DETAILED_ANALYSIS_FORMAT_WITH_COVERAGE = """
+## OUTPUT FORMAT
+
+Respond with ONLY valid JSON (no markdown fences, no extra text):
+{{
+  "faithfulness": {{
+    "summary": "One sentence summarizing faithfulness issues",
+    "claims": [
+      {{"statement": "...", "verdict": "supported|unsupported|contradicted", "reason": "...", "source_quote": "exact quote from context or null", "context_index": 0}}
+    ]
+  }},
+  "answer_relevancy": {{
+    "summary": "One sentence summarizing question coverage",
+    "components": [
+      {{"component": "the sub-question or intent", "verdict": "addressed|partially_addressed|not_addressed", "response_quote": "exact substring from response or null", "reason": "..."}}
+    ]
+  }},
+  "context_precision": {{
+    "summary": "One sentence summarizing context utilization",
+    "contexts": [
+      {{"context_index": 0, "verdict": "used|partially_used|not_used", "used_in_response": "exact substring from response or null", "reason": "..."}}
+    ]
+  }}
+}}"""
+
+DETAILED_ANALYSIS_FORMAT_WITHOUT_COVERAGE = """
+## OUTPUT FORMAT
+
+Respond with ONLY valid JSON (no markdown fences, no extra text):
+{{
+  "faithfulness": {{
+    "summary": "One sentence summarizing faithfulness issues",
+    "claims": [
+      {{"statement": "...", "verdict": "supported|unsupported|contradicted", "reason": "...", "source_quote": "exact quote from context or null", "context_index": 0}}
+    ]
+  }},
+  "context_precision": {{
+    "summary": "One sentence summarizing context utilization",
+    "contexts": [
+      {{"context_index": 0, "verdict": "used|partially_used|not_used", "used_in_response": "exact substring from response or null", "reason": "..."}}
+    ]
+  }}
+}}"""
+
+
 # Expose main functions
 RAG_USER_PROMPT_TEMPLATE = create_rag_prompt
 EVALUATION_PROMPT_TEMPLATE = create_evaluation_prompt

@@ -58,11 +58,11 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
         className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
           status === 'running' ? 'animate-pulse' : ''
         } ${
-          config.variant === 'default'
+          (config.variant as string) === 'default'
             ? 'bg-gray-500'
             : config.variant === 'success'
             ? 'bg-green-500'
-            : config.variant === 'warning'
+            : (config.variant as string) === 'warning'
             ? 'bg-yellow-500'
             : config.variant === 'error'
             ? 'bg-red-500'
